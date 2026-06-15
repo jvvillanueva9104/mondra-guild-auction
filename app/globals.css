@@ -13,6 +13,9 @@
   --guild-gray-dark: #525252;
   --guild-border: #2a2a2a;
   --guild-border-light: #3a3a3a;
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --anim-rise: guild-rise-in 0.62s var(--ease-out-expo) both;
+  --anim-fade: guild-fade-in 0.55s ease-out both;
 }
 
 * { box-sizing: border-box; }
@@ -32,6 +35,7 @@ body {
   pointer-events: none;
   background: url('/mondragon-logo.png') center 40% / min(88vw, 780px) no-repeat;
   opacity: 0.34;
+  animation: guild-bg-in 1.6s ease-out both;
 }
 
 .site-bg::after {
@@ -61,6 +65,12 @@ h1, h2, h3 { color: var(--guild-white); }
   border-radius: 12px;
   padding: 18px;
   margin: 14px 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--guild-border-light);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
@@ -87,10 +97,13 @@ button, .btn {
   padding: 10px 12px;
   border-radius: 8px;
   font-weight: 600;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-button:hover, .btn:hover {
+button:hover:not(:disabled), .btn:hover {
   background: var(--guild-red-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(196, 30, 58, 0.35);
 }
 
 button.secondary, .btn.secondary {
@@ -99,10 +112,12 @@ button.secondary, .btn.secondary {
   border: 1px solid var(--guild-border-light);
 }
 
-button.secondary:hover, .btn.secondary:hover {
+button.secondary:hover:not(:disabled), .btn.secondary:hover {
   border-color: var(--guild-red);
   color: var(--guild-red-bright);
   background: var(--guild-black-soft);
+  transform: translateY(-1px);
+  box-shadow: none;
 }
 
 button.danger, .btn.danger {
@@ -144,6 +159,7 @@ nav {
   color: var(--guild-white);
   padding: 10px 24px;
   border-bottom: 2px solid var(--guild-red);
+  animation: guild-nav-in 0.55s var(--ease-out-expo) both;
 }
 
 nav a {
@@ -167,6 +183,8 @@ nav a:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-decoration: none;
+  animation: var(--anim-fade);
+  animation-delay: 0.08s;
 }
 
 .nav-brand:hover {
@@ -240,6 +258,8 @@ nav a:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  animation: guild-banner-in 0.55s var(--ease-out-expo) both;
+  animation-delay: 0.14s;
 }
 
 .banner strong { color: var(--guild-white); }
@@ -294,6 +314,8 @@ input:disabled, button:disabled {
   overflow: hidden;
   background: var(--guild-black);
   border-color: var(--guild-red-dark);
+  animation: guild-board-in 0.85s var(--ease-out-expo) both;
+  animation-delay: 0.12s;
 }
 
 .feather-board {
@@ -439,9 +461,139 @@ input:disabled, button:disabled {
   color: var(--guild-gray-dark);
 }
 
+/* —— Page entrance animations —— */
+
+@keyframes guild-bg-in {
+  from { opacity: 0; }
+  to { opacity: 0.34; }
+}
+
+@keyframes guild-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes guild-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes guild-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes guild-banner-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes guild-board-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+main > h1,
+main > h2,
+main > .card,
+main > p,
+main > .row,
+main > table {
+  animation: var(--anim-rise);
+}
+
+main > *:nth-child(1) { animation-delay: 0.07s; }
+main > *:nth-child(2) { animation-delay: 0.13s; }
+main > *:nth-child(3) { animation-delay: 0.19s; }
+main > *:nth-child(4) { animation-delay: 0.25s; }
+main > *:nth-child(5) { animation-delay: 0.31s; }
+main > *:nth-child(6) { animation-delay: 0.37s; }
+main > *:nth-child(7) { animation-delay: 0.43s; }
+main > *:nth-child(8) { animation-delay: 0.49s; }
+
+main table tbody tr {
+  animation: guild-rise-in 0.42s var(--ease-out-expo) both;
+}
+
+main table tbody tr:nth-child(1) { animation-delay: 0.26s; }
+main table tbody tr:nth-child(2) { animation-delay: 0.30s; }
+main table tbody tr:nth-child(3) { animation-delay: 0.34s; }
+main table tbody tr:nth-child(4) { animation-delay: 0.38s; }
+main table tbody tr:nth-child(5) { animation-delay: 0.42s; }
+main table tbody tr:nth-child(6) { animation-delay: 0.46s; }
+main table tbody tr:nth-child(7) { animation-delay: 0.50s; }
+main table tbody tr:nth-child(8) { animation-delay: 0.54s; }
+main table tbody tr:nth-child(9) { animation-delay: 0.58s; }
+main table tbody tr:nth-child(10) { animation-delay: 0.62s; }
+main table tbody tr:nth-child(n+11) { animation-delay: 0.66s; }
+
+.login-main .login-card {
+  animation: guild-board-in 0.7s var(--ease-out-expo) both;
+  animation-delay: 0.1s;
+}
+
+.login-card > * {
+  animation: var(--anim-rise);
+}
+
+.login-card > *:nth-child(1) { animation-delay: 0.18s; }
+.login-card > *:nth-child(2) { animation-delay: 0.24s; }
+.login-card > *:nth-child(3) { animation-delay: 0.30s; }
+.login-card > *:nth-child(4) { animation-delay: 0.36s; }
+.login-card > *:nth-child(5) { animation-delay: 0.42s; }
+.login-card > *:nth-child(6) { animation-delay: 0.48s; }
+
+.site-nav > a:not(.nav-brand) {
+  animation: var(--anim-fade);
+}
+
+.site-nav > a:not(.nav-brand):nth-of-type(1) { animation-delay: 0.18s; }
+.site-nav > a:not(.nav-brand):nth-of-type(2) { animation-delay: 0.24s; }
+
+.nav-auth {
+  animation: var(--anim-fade);
+  animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media print {
   nav, .card:first-of-type, .banner, h1 { display: none !important; }
   .results-main { max-width: none; padding: 0; }
   .feather-board-wrap { border: 0; }
   .feather-board-columns { grid-template-columns: repeat(3, 1fr); }
+  *, *::before, *::after { animation: none !important; }
 }
