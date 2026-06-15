@@ -1,0 +1,15 @@
+{
+  "name": "guild-auction-discord-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.108.1",
+    "discord.js": "^14.26.4",
+    "dotenv": "16.6.1",
+    "ws": "8.18.3"
+  }
+}
