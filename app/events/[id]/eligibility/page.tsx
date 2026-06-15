@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { EventBanner } from '@/components/EventBanner'
@@ -15,6 +15,21 @@ export default function EligibilityPage() {
   const supabase = useSupabase()
   const { event, loading: eventLoading, editable } = useEvent(id)
   const [rows, setRows] = useState<Row[]>([])
+  const onlineHeaderRef = useRef<HTMLInputElement>(null)
+
+  const allOnline = rows.length > 0 && rows.every(r => r.is_online)
+  const someOnline = rows.some(r => r.is_online)
+
+  useEffect(() => {
+    if (onlineHeaderRef.current) {
+      onlineHeaderRef.current.indeterminate = someOnline && !allOnline
+    }
+  }, [someOnline, allOnline])
+
+  function setAllOnline(checked: boolean) {
+    if (!editable) return
+    setRows(rows.map(r => ({ ...r, is_online: checked })))
+  }
 
   async function load() {
     if (!supabase) return
@@ -79,6 +94,23 @@ export default function EligibilityPage() {
       <p>Only members marked present who are online here enter the allocation engine.</p>
       {!rows.length && <p className="muted">No attendees yet. Go back and mark attendance first.</p>}
       <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>
+              <label className="check-all-label">
+                <input
+                  ref={onlineHeaderRef}
+                  type="checkbox"
+                  checked={allOnline}
+                  disabled={!editable || !rows.length}
+                  onChange={e => setAllOnline(e.target.checked)}
+                />
+                Online
+              </label>
+            </th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>

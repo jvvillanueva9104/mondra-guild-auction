@@ -81,13 +81,13 @@ create index idx_allocations_event on auction_allocations(event_id);
 
 -- Required on newer Supabase projects: tables are not auto-granted to API roles.
 grant usage on schema public to anon, authenticated, service_role;
-grant select, insert, update, delete on public.members to anon, authenticated;
-grant select, insert, update, delete on public.events to anon, authenticated;
-grant select, insert, update, delete on public.event_rewards to anon, authenticated;
-grant select, insert, update, delete on public.attendance to anon, authenticated;
-grant select, insert, update, delete on public.event_participants to anon, authenticated;
-grant select, insert, update, delete on public.allocation_runs to anon, authenticated;
-grant select, insert, update, delete on public.auction_allocations to anon, authenticated;
+grant select, insert, update, delete on public.members to anon, authenticated, service_role;
+grant select, insert, update, delete on public.events to anon, authenticated, service_role;
+grant select, insert, update, delete on public.event_rewards to anon, authenticated, service_role;
+grant select, insert, update, delete on public.attendance to anon, authenticated, service_role;
+grant select, insert, update, delete on public.event_participants to anon, authenticated, service_role;
+grant select, insert, update, delete on public.allocation_runs to anon, authenticated, service_role;
+grant select, insert, update, delete on public.auction_allocations to anon, authenticated, service_role;
 
 alter table members enable row level security;
 alter table events enable row level security;

@@ -155,7 +155,7 @@ Members react ✅ on the bot's message.
 |---------|-----|
 | Slash commands don’t appear | Wait ~1 min; re-invite bot with `applications.commands` scope |
 | Bot doesn’t see reactions | Enable **Server Members Intent**; restart bot |
-| `permission denied` from Supabase | Run `fix-grants.sql`; verify **secret** key in bot `.env` |
+| `permission denied` from Supabase | Run `supabase/migrations/006_service_role_grants.sql` (or updated `fix-grants.sql`); verify **secret** key in bot `.env` |
 | Member not on website after react | Refresh attendance page; check bot terminal for errors |
 | Duplicate name error | Two members same nickname — officer renames one in Members page |
 
@@ -165,10 +165,10 @@ Members react ✅ on the bot's message.
 
 For production, host the bot so it stays online:
 
-- [Railway](https://railway.app) — connect repo, set root to `discord-bot`, add env vars
-- [Fly.io](https://fly.io) — small VM running `npm start`
+- [Monkey Network](https://monkey-network.xyz) — free Discord bot hosting (zip upload, set env vars, `npm start`)
+- [JustRunMy.App](https://justrunmy.app) — free tier, zip upload
 
-The **website** can stay on Vercel; the **bot** runs separately.
+The **website** stays on Vercel; the **bot** runs separately.
 
 ---
 

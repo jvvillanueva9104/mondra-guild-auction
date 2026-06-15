@@ -27,6 +27,19 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID || !SUPABASE_URL || !SUPABASE_SERVIC
   process.exit(1)
 }
 
+if (
+  SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_publishable_')
+  || SUPABASE_SERVICE_ROLE_KEY === process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+) {
+  console.error(`
+SUPABASE_SERVICE_ROLE_KEY must be the Supabase SECRET key (sb_secret_...), not the publishable/anon key.
+After officer login (migration 005), the bot needs the secret key to read events and post check-in.
+
+Supabase → Settings → API → Secret keys → reveal and copy the secret key into discord-bot/.env
+`)
+  process.exit(1)
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
   realtime: { transport: ws },
