@@ -6,7 +6,8 @@ import { EventBanner } from '@/components/EventBanner'
 import { useEvent } from '@/hooks/useEvent'
 import { errorMessage } from '@/lib/errors'
 import { generateAllocations } from '@/lib/allocation'
-import { loadRotationHistory } from '@/lib/history'
+import { loadRotationContext } from '@/lib/history'
+import { consumeHeldTurns, serializeHeldTurns, updateHeldTurns } from '@/lib/rotation'
 import { REWARD_LABELS } from '@/lib/reward-defaults'
 import { useSupabase } from '@/lib/supabase'
 import { EventReward, Member, RewardType } from '@/lib/types'
@@ -25,7 +26,12 @@ export default function GeneratePage() {
   async function load() {
     if (!supabase) return
     const [{ data: parts }, { data: rewardsData }] = await Promise.all([
-      supabase.from('event_participants').select('member_id').eq('event_id', id).eq('is_online', true),
+      supabase
+        .from('event_participants')
+        .select('member_id')
+        .eq('event_id', id)
+        .eq('is_online', true)
+        .eq('no_gold', false),
       supabase.from('event_rewards').select('reward_type,quantity,per_member_cap').eq('event_id', id),
     ])
     const ids = (parts ?? []).map(p => p.member_id)
@@ -51,13 +57,21 @@ export default function GeneratePage() {
 
   useEffect(() => {
     if (!supabase || generated) return
-    loadRotationHistory(supabase, id)
-      .then(history => {
-        if (history.lastEventDate) {
-          const label = history.lastEventType ? `${history.lastEventType} · ${history.lastEventDate}` : history.lastEventDate
-          setRotationNote(`Unified rotation: last guild event (${label}). Members who received an item there are deprioritized for that item across EO and GL.`)
+    loadRotationContext(supabase, id)
+      .then(ctx => {
+        if (ctx.isFirstGeneratedEvent) {
+          setRotationNote(
+            'First guild event — random order among tonight\'s online bidders. ' +
+            'Late joiners (first pool after this event) bid behind prior attendees.',
+          )
         } else {
-          setRotationNote('First guild event — fair ordering only (no prior rotation history).')
+          const label = ctx.lastEventType ? `${ctx.lastEventType} · ${ctx.lastEventDate}` : ctx.lastEventDate
+          setRotationNote(
+            `Rotation v3: last event (${label}). ` +
+            'Last puppet/feather winners sit out unless overflow. ' +
+            'Prior-pool members ahead of late joiners. ' +
+            'Absent on due turn → held once. No gold before lock → no penalty.',
+          )
         }
       })
       .catch(() => setRotationNote(null))
@@ -67,15 +81,45 @@ export default function GeneratePage() {
     if (!supabase || !locked || generating || !event) return
     setGenerating(true)
     try {
-      const history = await loadRotationHistory(supabase, id)
-      const allocations = generateAllocations(id, event.type, eligible, rewards, history)
+      const ctx = await loadRotationContext(supabase, id)
+
+      const [{ data: attendance }, { data: participants }] = await Promise.all([
+        supabase.from('attendance').select('member_id').eq('event_id', id),
+        supabase.from('event_participants').select('member_id,is_online,no_gold').eq('event_id', id),
+      ])
+
+      const attendedMemberIds = new Set((attendance ?? []).map(a => a.member_id))
+      const noGoldMemberIds = new Set(
+        (participants ?? []).filter(p => p.no_gold).map(p => p.member_id),
+      )
+      const eligibleIds = new Set(eligible.map(m => m.id))
+
+      let heldTurns = updateHeldTurns(ctx, attendedMemberIds, noGoldMemberIds)
+
+      const { allocations, dueForNext } = generateAllocations(
+        id,
+        event.type,
+        eligible,
+        rewards,
+        ctx,
+        heldTurns,
+      )
+
+      const heldJson = serializeHeldTurns(consumeHeldTurns(heldTurns, eligibleIds))
+
       const { error: delAllocError } = await supabase.from('auction_allocations').delete().eq('event_id', id)
       if (delAllocError) throw delAllocError
       const { error: delRunError } = await supabase.from('allocation_runs').delete().eq('event_id', id)
       if (delRunError) throw delRunError
       const { data: run, error: runError } = await supabase
         .from('allocation_runs')
-        .insert({ event_id: id, seed: id, algorithm_version: 'rotation-unified-v2' })
+        .insert({
+          event_id: id,
+          seed: id,
+          algorithm_version: 'rotation-v3-cohort',
+          due_for_next: dueForNext,
+          held_turns: heldJson,
+        })
         .select()
         .single()
       if (runError) throw runError
@@ -102,7 +146,8 @@ export default function GeneratePage() {
     .map(type => {
       const row = rewards.find(r => r.reward_type === type)
       if (!row?.quantity) return null
-      return `${REWARD_LABELS[type]}: max ${row.per_member_cap ?? '—'} per player`
+      const cap = type === 'puppet' ? 1 : (row.per_member_cap ?? '—')
+      return `${REWARD_LABELS[type]}: max ${cap} per player`
     })
     .filter(Boolean)
 

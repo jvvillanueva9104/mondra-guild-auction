@@ -15,6 +15,9 @@ discord-bot/.env
 *.log
 .DS_Store
 
+# portable archives (never commit)
+*.zip
+
 # editor
 .vscode/
 .idea/

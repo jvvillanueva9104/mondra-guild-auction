@@ -51,6 +51,7 @@ create table event_participants (
   event_id uuid not null references events(id) on delete cascade,
   member_id uuid not null references members(id),
   is_online boolean not null default false,
+  no_gold boolean not null default false,
   unique(event_id, member_id)
 );
 
@@ -59,6 +60,8 @@ create table allocation_runs (
   event_id uuid not null references events(id) on delete cascade,
   seed text not null,
   algorithm_version text not null default 'launch-v1',
+  due_for_next jsonb not null default '{}',
+  held_turns jsonb not null default '{}',
   generated_at timestamptz not null default now()
 );
 

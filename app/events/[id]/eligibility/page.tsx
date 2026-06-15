@@ -7,7 +7,7 @@ import { useEvent } from '@/hooks/useEvent'
 import { useSupabase } from '@/lib/supabase'
 import { Member } from '@/lib/types'
 
-type Row = Member & { is_online: boolean }
+type Row = Member & { is_online: boolean; no_gold: boolean }
 
 export default function EligibilityPage() {
   const { id } = useParams<{ id: string }>()
@@ -28,7 +28,23 @@ export default function EligibilityPage() {
 
   function setAllOnline(checked: boolean) {
     if (!editable) return
-    setRows(rows.map(r => ({ ...r, is_online: checked })))
+    setRows(rows.map(r => ({ ...r, is_online: checked, no_gold: checked ? false : r.no_gold })))
+  }
+
+  function setOnline(memberId: string, checked: boolean) {
+    setRows(rows.map(r =>
+      r.id === memberId
+        ? { ...r, is_online: checked, no_gold: checked ? false : r.no_gold }
+        : r,
+    ))
+  }
+
+  function setNoGold(memberId: string, checked: boolean) {
+    setRows(rows.map(r =>
+      r.id === memberId
+        ? { ...r, no_gold: checked, is_online: checked ? false : r.is_online }
+        : r,
+    ))
   }
 
   async function load() {
@@ -38,10 +54,17 @@ export default function EligibilityPage() {
     if (!ids.length) { setRows([]); return }
     const [{ data: members }, { data: parts }] = await Promise.all([
       supabase.from('members').select('*').in('id', ids).eq('status', 'active').eq('is_auction_eligible', true).order('name'),
-      supabase.from('event_participants').select('member_id,is_online').eq('event_id', id),
+      supabase.from('event_participants').select('member_id,is_online,no_gold').eq('event_id', id),
     ])
-    const map = new Map((parts ?? []).map(p => [p.member_id, p.is_online]))
-    setRows((members ?? []).map(m => ({ ...m, is_online: map.get(m.id) ?? false })))
+    const map = new Map((parts ?? []).map(p => [p.member_id, p]))
+    setRows((members ?? []).map(m => {
+      const part = map.get(m.id)
+      return {
+        ...m,
+        is_online: part?.is_online ?? false,
+        no_gold: part?.no_gold ?? false,
+      }
+    }))
   }
 
   useEffect(() => { load() }, [supabase, id])
@@ -67,7 +90,12 @@ export default function EligibilityPage() {
     }
 
     await supabase.from('event_participants').delete().eq('event_id', id)
-    const insertRows = rows.map(r => ({ event_id: id, member_id: r.id, is_online: r.is_online }))
+    const insertRows = rows.map(r => ({
+      event_id: id,
+      member_id: r.id,
+      is_online: r.is_online,
+      no_gold: r.no_gold,
+    }))
     const { error: partError } = await supabase.from('event_participants').insert(insertRows)
     if (partError) return alert(partError.message)
 
@@ -91,7 +119,11 @@ export default function EligibilityPage() {
     <h1>Auction Eligible Pool</h1>
     <EventBanner event={event} />
     <section className="card">
-      <p>Only members marked present who are online here enter the allocation engine.</p>
+      <p>
+        Mark who is bidding tonight. <b>Online</b> enters the allocation board.
+        <b> No gold / passing</b> means present but not bidding — no queue penalty.
+        Only one of Online or No gold can be checked.
+      </p>
       {!rows.length && <p className="muted">No attendees yet. Go back and mark attendance first.</p>}
       <table>
         <thead>
@@ -109,6 +141,7 @@ export default function EligibilityPage() {
                 Online
               </label>
             </th>
+            <th>No gold</th>
           </tr>
         </thead>
         <tbody>
@@ -120,7 +153,15 @@ export default function EligibilityPage() {
                   type="checkbox"
                   checked={r.is_online}
                   disabled={!editable}
-                  onChange={e => setRows(rows.map(x => x.id === r.id ? { ...x, is_online: e.target.checked } : x))}
+                  onChange={e => setOnline(r.id, e.target.checked)}
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  checked={r.no_gold}
+                  disabled={!editable}
+                  onChange={e => setNoGold(r.id, e.target.checked)}
                 />
               </td>
             </tr>

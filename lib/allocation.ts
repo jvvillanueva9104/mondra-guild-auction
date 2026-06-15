@@ -1,4 +1,10 @@
-import { RotationHistory, rotationOrder } from './rotation'
+import {
+  computeDueForNext,
+  rotationOrder,
+  ROTATABLE_TYPES,
+  RotationContext,
+  splitPassMembers,
+} from './rotation'
 import { DEFAULT_PER_MEMBER_CAPS } from './reward-defaults'
 import { Allocation, EventReward, EventType, Member, RewardType } from './types'
 
@@ -6,6 +12,11 @@ export { seededShuffle } from './shuffle'
 
 export const ROWS_PER_PAGE = 4
 export const REWARD_ORDER: RewardType[] = ['puppet', 'mvp', 'light_dark', 'time_space']
+
+export type GenerateResult = {
+  allocations: Allocation[]
+  dueForNext: Record<string, string | null>
+}
 
 export function buildRewardSlots(rewards: EventReward[]): RewardType[] {
   return REWARD_ORDER.flatMap(type => Array(rewards.find(r => r.reward_type === type)?.quantity ?? 0).fill(type))
@@ -106,11 +117,7 @@ function assignNextFreeSlots(
   }
 }
 
-/**
- * Feathers: equal share per bidder (respecting cap), filled sequentially row by row in rotation order.
- * Slots left after the equal split stay Free For All.
- */
-function assignPageGrouped(
+function assignPageGroupedForMembers(
   eventId: string,
   members: Member[],
   itemType: RewardType,
@@ -123,6 +130,12 @@ function assignPageGrouped(
 
   for (let s = startSlotIndex; s < end; s++) {
     assignments.set(s, null)
+  }
+
+  if (members.length === 0) {
+    return [...assignments.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([slotIndex, memberId]) => makeAllocation(eventId, itemType, slotIndex, memberId))
   }
 
   const perMember = perMemberCap !== undefined
@@ -140,48 +153,126 @@ function assignPageGrouped(
     .map(([slotIndex, memberId]) => makeAllocation(eventId, itemType, slotIndex, memberId))
 }
 
+/**
+ * Puppet / feathers with sit-out pass 1, overflow pass 2, remainder FFA.
+ */
+function assignRotatingItem(
+  eventId: string,
+  orderedMembers: Member[],
+  itemType: RewardType,
+  startSlotIndex: number,
+  count: number,
+  perMemberCap: number | undefined,
+  lastWinners: Set<string>,
+  pageGrouped: boolean,
+): Allocation[] {
+  const { pass1, pass2 } = splitPassMembers(orderedMembers, lastWinners)
+
+  if (pageGrouped) {
+    const pass1Allocs = assignPageGroupedForMembers(
+      eventId, pass1, itemType, startSlotIndex, count, perMemberCap,
+    )
+    let filled = pass1Allocs.filter(a => a.member_id !== null).length
+    let remaining = count - filled
+    if (remaining <= 0) return pass1Allocs
+
+    const pass2Allocs = assignPageGroupedForMembers(
+      eventId, pass2, itemType, startSlotIndex + filled, remaining, perMemberCap,
+    )
+    const merged = [...pass1Allocs]
+    for (const alloc of pass2Allocs) {
+      const idx = merged.findIndex(a => a.slot_index === alloc.slot_index)
+      if (idx >= 0) merged[idx] = alloc
+    }
+    filled = merged.filter(a => a.member_id !== null).length
+    remaining = count - filled
+    if (remaining <= 0) return merged
+
+    const ffaStart = startSlotIndex + filled
+    for (let i = 0; i < remaining; i++) {
+      const idx = merged.findIndex(a => a.slot_index === ffaStart + i)
+      if (idx >= 0) merged[idx] = makeAllocation(eventId, itemType, ffaStart + i, null)
+    }
+    return merged
+  }
+
+  const pass1Allocs = assignOneEachFirst(
+    eventId, pass1, itemType, startSlotIndex, count, perMemberCap ?? 1,
+  )
+  let filled = pass1Allocs.filter(a => a.member_id !== null).length
+  let remaining = count - filled
+  if (remaining <= 0) return pass1Allocs
+
+  const pass2Allocs = assignOneEachFirst(
+    eventId, pass2, itemType, startSlotIndex + filled, remaining, perMemberCap ?? 1,
+  )
+  const merged = [...pass1Allocs]
+  for (const alloc of pass2Allocs) {
+    const idx = merged.findIndex(a => a.slot_index === alloc.slot_index)
+    if (idx >= 0) merged[idx] = alloc
+  }
+  return merged
+}
+
 export function generateAllocations(
   eventId: string,
   eventType: EventType,
   eligibleMembers: Member[],
   rewards: EventReward[],
-  history: RotationHistory,
-): Allocation[] {
+  ctx: RotationContext,
+  heldTurns: Map<string, Set<RewardType>>,
+): GenerateResult {
   if (eligibleMembers.length === 0) throw new Error('No online eligible members')
 
   const slots = buildRewardSlots(rewards)
   if (slots.length === 0) throw new Error('No reward slots configured')
 
   const allocations: Allocation[] = []
+  const dueForNext: Record<string, string | null> = {}
   let slotIndex = 0
 
   for (const itemType of REWARD_ORDER) {
     const count = rewardQuantity(rewards, itemType)
     if (count === 0) continue
 
-    const orderedMembers = itemType === 'mvp'
-      ? eligibleMembers
-      : rotationOrder(eligibleMembers, eventId, itemType, history)
-
-    const cap = rewardPerMemberCap(rewards, itemType, eventType)
-
-    let batch: Allocation[]
-    switch (itemType) {
-      case 'puppet':
-        batch = assignOneEachFirst(eventId, orderedMembers, itemType, slotIndex, count, cap ?? 1)
-        break
-      case 'mvp':
-        batch = assignFreeForAll(eventId, itemType, slotIndex, count)
-        break
-      case 'light_dark':
-      case 'time_space':
-        batch = assignPageGrouped(eventId, orderedMembers, itemType, slotIndex, count, cap)
-        break
+    if (itemType === 'mvp') {
+      allocations.push(...assignFreeForAll(eventId, itemType, slotIndex, count))
+      slotIndex += count
+      continue
     }
+
+    const orderedMembers = rotationOrder(eligibleMembers, eventId, itemType, ctx, heldTurns)
+    const lastWinners = ctx.isFirstGeneratedEvent
+      ? new Set<string>()
+      : (ctx.lastEventWinners.get(itemType) ?? new Set<string>())
+
+    let cap = rewardPerMemberCap(rewards, itemType, eventType)
+    if (itemType === 'puppet') cap = 1
+
+    const batch = assignRotatingItem(
+      eventId,
+      orderedMembers,
+      itemType,
+      slotIndex,
+      count,
+      cap,
+      lastWinners,
+      itemType === 'light_dark' || itemType === 'time_space',
+    )
 
     allocations.push(...batch)
     slotIndex += count
+    dueForNext[itemType] = computeDueForNext(eligibleMembers, eventId, itemType, ctx, heldTurns)
   }
 
-  return allocations
+  for (const type of ROTATABLE_TYPES) {
+    if (!(type in dueForNext)) {
+      dueForNext[type] = computeDueForNext(eligibleMembers, eventId, type, ctx, heldTurns)
+    }
+  }
+
+  return {
+    allocations,
+    dueForNext,
+  }
 }
