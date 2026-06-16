@@ -311,7 +311,7 @@ input:disabled, button:disabled {
 
 .feather-board-wrap {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   background: var(--guild-black);
   border-color: var(--guild-red-dark);
   animation: guild-board-in 0.85s var(--ease-out-expo) both;
@@ -381,21 +381,13 @@ input:disabled, button:disabled {
 
 .feather-board-columns {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 20px;
-  width: max-content;
-  min-width: min(100%, 360px);
-}
-
-.feather-board-scroll {
-  overflow-x: auto;
-  padding-bottom: 10px;
-  -webkit-overflow-scrolling: touch;
+  flex-direction: column;
+  gap: 28px;
 }
 
 .feather-board-column {
-  flex: 0 0 360px;
-  min-width: 360px;
+  width: 100%;
+  max-width: 880px;
 }
 
 .feather-board-column-title {
@@ -687,7 +679,6 @@ main table tbody tr:nth-child(n+11) { animation-delay: 0.66s; }
   nav, .card:first-of-type, .banner, h1 { display: none !important; }
   .results-main { max-width: none; padding: 0; }
   .feather-board-wrap { border: 0; }
-  .feather-board-columns { flex-wrap: wrap; width: 100%; }
-  .feather-board-column { flex: 1 1 100%; min-width: 100%; }
+  .feather-board-column { max-width: 100%; }
   *, *::before, *::after { animation: none !important; }
 }

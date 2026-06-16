@@ -37,9 +37,8 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
         </div>
       </header>
 
-      <div className="feather-board-scroll">
-        <div className="feather-board-columns">
-          {columns.map((columnPages, colIndex) => (
+      <div className="feather-board-columns">
+        {columns.map((columnPages, colIndex) => (
             <div key={colIndex} className="feather-board-column">
               <h3 className="feather-board-column-title">{pageRangeLabel(columnPages)}</h3>
               <table className="feather-board-table">
@@ -83,7 +82,6 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
               </table>
             </div>
           ))}
-        </div>
       </div>
     </div>
   )
