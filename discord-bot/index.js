@@ -87,10 +87,58 @@ async function upsertMemberFromDiscord(guildMember) {
     .single()
 
   if (error?.code === '23505') {
-    return findMemberByDiscordId(discordId)
+    const byDiscord = await findMemberByDiscordId(discordId)
+    if (byDiscord) return byDiscord
+    throw new Error(
+      `Roster name "${name}" is already taken. Ask an officer to use a unique Discord nickname.`,
+    )
   }
   if (error) throw error
   return data
+}
+
+async function checkInFromDiscordUser(guildMember, eventId) {
+  const member = await upsertMemberFromDiscord(guildMember)
+  await markPresent(eventId, member.id)
+  return member
+}
+
+/** Re-process everyone who already reacted — fixes missed events and re-add after roster delete. */
+async function syncCheckinReactions(event, { logEach = false } = {}) {
+  if (!event?.checkin_message_id || !event?.checkin_channel_id) return 0
+
+  const guild = client.guilds.cache.get(DISCORD_GUILD_ID)
+  if (!guild) return 0
+
+  const channel = await guild.channels.fetch(event.checkin_channel_id).catch(() => null)
+  if (!channel?.isTextBased()) return 0
+
+  const message = await channel.messages.fetch(event.checkin_message_id).catch(() => null)
+  if (!message) return 0
+
+  const reaction = message.reactions.cache.find(
+    r => r.emoji.name === CHECKIN_EMOJI || r.emoji.toString() === CHECKIN_EMOJI,
+  )
+  if (!reaction) return 0
+
+  const users = await reaction.users.fetch()
+  let synced = 0
+
+  for (const user of users.values()) {
+    if (user.bot) continue
+    const guildMember = await guild.members.fetch(user.id).catch(() => null)
+    if (!guildMember) continue
+
+    try {
+      const member = await checkInFromDiscordUser(guildMember, event.id)
+      synced++
+      if (logEach) console.log(`Synced check-in: ${member.name} (${user.id})`)
+    } catch (e) {
+      console.error(`Check-in sync failed for ${user.id}:`, e.message)
+    }
+  }
+
+  return synced
 }
 
 async function listDraftEvents(type) {
@@ -171,6 +219,9 @@ async function openCheckin(event, channel) {
     checkin_message_id: message.id,
     checkin_channel_id: message.channel.id,
   }).eq('id', event.id)
+
+  const updated = { ...event, checkin_message_id: message.id, checkin_channel_id: message.channel.id }
+  await syncCheckinReactions(updated, { logEach: true })
 
   return message
 }
@@ -255,6 +306,9 @@ function startDraftEventWatch() {
 function startDraftEventPolling(intervalMs = 15000) {
   return setInterval(() => {
     catchUpDraftCheckins().catch(err => console.error('Check-in poll failed:', err.message))
+    getOpenCheckinEvent()
+      .then(event => event ? syncCheckinReactions(event) : 0)
+      .catch(err => console.error('Reaction sync failed:', err.message))
   }, intervalMs)
 }
 
@@ -274,6 +328,11 @@ async function setupAutoCheckin() {
 
   try {
     await catchUpDraftCheckins()
+    const openEvent = await getOpenCheckinEvent()
+    if (openEvent) {
+      const n = await syncCheckinReactions(openEvent, { logEach: true })
+      if (n > 0) console.log(`Startup: synced ${n} check-in reaction(s).`)
+    }
     startDraftEventWatch()
     startDraftEventPolling()
     console.log('Auto check-in active (Realtime + 15s polling fallback).')
@@ -448,8 +507,7 @@ async function handleReaction(reaction, user, added) {
   if (!guildMember) return
 
   if (added) {
-    const member = await upsertMemberFromDiscord(guildMember)
-    await markPresent(event.id, member.id)
+    const member = await checkInFromDiscordUser(guildMember, event.id)
     console.log(`Checked in: ${member.name} (${user.id})`)
   } else {
     const member = await findMemberByDiscordId(user.id)
