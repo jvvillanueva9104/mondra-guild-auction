@@ -310,9 +310,9 @@ input:disabled, button:disabled {
 .results-main { max-width: 1600px; }
 
 .feather-board-wrap {
-  padding: 16px;
+  padding: 0;
   overflow: visible;
-  background: var(--guild-black-soft);
+  background: var(--guild-black);
   border-color: var(--guild-red-dark);
   animation: guild-board-in 0.85s var(--ease-out-expo) both;
   animation-delay: 0.12s;
@@ -326,28 +326,26 @@ input:disabled, button:disabled {
 
 .feather-board {
   color: var(--guild-white);
-  padding: 24px;
+  padding: 20px 18px 24px;
   width: fit-content;
   max-width: 100%;
-  background: linear-gradient(180deg, #0a0a0a 0%, #121212 100%);
-  border: 1px solid var(--guild-red-dark);
-  border-radius: 8px;
+  background: linear-gradient(180deg, var(--guild-black) 0%, var(--guild-black-soft) 100%);
 }
 
 .feather-board-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 24px;
-  padding-bottom: 18px;
-  border-bottom: 2px solid var(--guild-red-dark);
+  gap: 16px;
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--guild-red-dark);
 }
 
 .feather-board-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .feather-board-logo {
@@ -360,7 +358,7 @@ input:disabled, button:disabled {
 .feather-board-title {
   margin: 0;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 1.75rem;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--guild-red);
@@ -368,76 +366,29 @@ input:disabled, button:disabled {
 }
 
 .feather-board-meta {
-  text-align: right;
-}
-
-.feather-board-subtitle {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--guild-gray);
-  letter-spacing: 0.02em;
-}
-
-.feather-board-meta-pages {
-  display: block;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--guild-white);
-  margin-bottom: 10px;
-  text-align: right;
-}
-
-.feather-board-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  justify-content: flex-end;
-}
-
-.feather-board-legend-item {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
+  text-align: right;
+  font-size: 12px;
   color: var(--guild-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
-
-.feather-board-legend-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.legend-puppet .feather-board-legend-swatch { background: #c41e3a; }
-.legend-mvp .feather-board-legend-swatch { background: #eab308; }
-.legend-light_dark .feather-board-legend-swatch { background: #a855f7; }
-.legend-time_space .feather-board-legend-swatch { background: #3b82f6; }
-.legend-ffa .feather-board-legend-swatch { background: #525252; border: 1px dashed #888; }
 
 .feather-board-columns {
   display: grid;
-  grid-template-columns: repeat(2, 480px);
+  grid-template-columns: repeat(2, 460px);
   gap: 24px;
   align-items: start;
 }
 
 .feather-board-column {
-  background: rgba(17, 17, 17, 0.6);
-  border: 1px solid var(--guild-border-light);
-  border-radius: 6px;
-  padding: 14px;
+  min-width: 0;
 }
 
 .feather-board-column-title {
   margin: 0 0 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--guild-red-border);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  letter-spacing: 0.14em;
   color: var(--guild-red-bright);
   text-transform: uppercase;
   font-weight: 700;
@@ -447,37 +398,39 @@ input:disabled, button:disabled {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  background: transparent;
 }
 
 .feather-board-table th,
 .feather-board-table td {
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--guild-border-light);
   text-align: center;
   vertical-align: middle;
 }
 
 .feather-board-table th {
-  background: #1a1a1a;
+  background: var(--guild-black-muted);
   color: var(--guild-red-bright);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   font-weight: 700;
-  padding: 8px 4px;
-  text-transform: uppercase;
-}
-
-.feather-board-th-pg {
-  width: 44px;
-}
-
-.feather-board-table tbody tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 6px;
 }
 
 .feather-board-table td {
-  background: #141414;
-  height: 52px;
-  padding: 6px 8px;
+  background: rgba(22, 22, 22, 0.95);
+  height: 68px;
+  padding: 0;
+}
+
+.feather-board-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  min-height: 68px;
 }
 
 .feather-board-name {
@@ -485,50 +438,48 @@ input:disabled, button:disabled {
   color: var(--guild-white);
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
   word-break: break-word;
-  hyphens: auto;
 }
 
-.feather-board-table td.item-puppet {
-  box-shadow: inset 0 3px 0 0 #c41e3a;
-}
-
-.feather-board-table td.item-mvp {
-  box-shadow: inset 0 3px 0 0 #eab308;
-}
-
-.feather-board-table td.item-light_dark {
-  box-shadow: inset 0 3px 0 0 #a855f7;
-}
-
-.feather-board-table td.item-time_space {
-  box-shadow: inset 0 3px 0 0 #3b82f6;
-}
-
-.feather-board-table td.ffa-cell {
-  background: #111 !important;
+.feather-board-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--guild-red-muted);
+  color: var(--guild-red-bright);
+  border: 1px solid var(--guild-red-border);
 }
 
 .feather-board-table td.ffa-cell .feather-board-name {
-  color: #888;
+  color: var(--guild-gray);
   font-style: italic;
   font-weight: 500;
-  font-size: 12px;
+}
+
+.feather-board-table td.ffa-cell .feather-board-badge {
+  background: rgba(82, 82, 82, 0.35);
+  color: var(--guild-gray);
+  border-color: var(--guild-border-light);
 }
 
 .feather-board-pg {
-  width: 44px;
-  background: #0f0f0f !important;
+  width: 48px;
+  background: var(--guild-black-soft) !important;
 }
 
 .feather-board-pg span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 2px solid var(--guild-red);
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--guild-red-dark);
   border-radius: 999px;
   color: var(--guild-red-bright);
   font-size: 12px;
@@ -536,10 +487,10 @@ input:disabled, button:disabled {
 }
 
 .feather-board-empty {
-  color: #444;
+  color: var(--guild-gray-dark);
 }
 
-@media (max-width: 1040px) {
+@media (max-width: 980px) {
   .feather-board-columns {
     grid-template-columns: 1fr;
   }

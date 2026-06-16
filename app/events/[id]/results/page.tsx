@@ -164,7 +164,7 @@ export default function ResultsPage() {
 
     {view === 'board' ? (
       <section className="card feather-board-wrap">
-        <p className="muted feather-board-hint">Color bar on each cell = item type (see legend). Download PNG for Discord.</p>
+        <p className="muted feather-board-hint">Download PNG for Discord — includes the full board.</p>
         <FeatherProtocolBoard event={event} results={boardResults} />
       </section>
     ) : (
