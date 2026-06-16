@@ -65,6 +65,12 @@ export function chunkBoardPages(pages: BoardPage[], chunkSize = 10): BoardPage[]
   return chunks
 }
 
+export function displayBoardName(name: string, maxLen = 26): string {
+  if (name === 'Free For All') return 'FFA'
+  if (name.length <= maxLen) return name
+  return `${name.slice(0, maxLen - 1)}…`
+}
+
 export function pageRangeLabel(pages: BoardPage[]): string {
   if (!pages.length) return ''
   return `PAGES ${pages[0].pageNumber}–${pages[pages.length - 1].pageNumber}`

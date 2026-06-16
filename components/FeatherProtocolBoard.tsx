@@ -1,4 +1,4 @@
-import { buildBoardPages, chunkBoardPages, itemShortLabel, pageRangeLabel } from '@/lib/board'
+import { buildBoardPages, chunkBoardPages, displayBoardName, itemShortLabel, pageRangeLabel } from '@/lib/board'
 import { Event } from '@/lib/types'
 
 type ResultLike = {
@@ -12,9 +12,10 @@ type ResultLike = {
 type Props = {
   event: Event
   results: ResultLike[]
+  exportId?: string
 }
 
-export function FeatherProtocolBoard({ event, results }: Props) {
+export function FeatherProtocolBoard({ event, results, exportId = 'feather-board-export' }: Props) {
   const pages = buildBoardPages(results)
   const columns = chunkBoardPages(pages, 10)
   const totalPages = pages.length
@@ -24,7 +25,7 @@ export function FeatherProtocolBoard({ event, results }: Props) {
   }
 
   return (
-    <div className="feather-board">
+    <div className="feather-board" id={exportId}>
       <header className="feather-board-header">
         <div className="feather-board-brand">
           <img src="/mondragon-icon.png" alt="" className="feather-board-logo" width={36} height={36} />
@@ -36,44 +37,53 @@ export function FeatherProtocolBoard({ event, results }: Props) {
         </div>
       </header>
 
-      <div className="feather-board-columns">
-        {columns.map((columnPages, colIndex) => (
-          <div key={colIndex} className="feather-board-column">
-            <h3 className="feather-board-column-title">{pageRangeLabel(columnPages)}</h3>
-            <table className="feather-board-table">
-              <thead>
-                <tr>
-                  <th>PG</th>
-                  <th>ROW 1</th>
-                  <th>ROW 2</th>
-                  <th>ROW 3</th>
-                  <th>ROW 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                {columnPages.map(page => (
-                  <tr key={page.pageNumber}>
-                    <td className="feather-board-pg">
-                      <span>{page.pageNumber}</span>
-                    </td>
-                    {page.rows.map((cell, rowIndex) => (
-                      <td key={rowIndex} className={cell?.isFfa ? 'ffa-cell' : undefined}>
-                        {cell ? (
-                          <>
-                            <strong>{cell.name}</strong>
-                            <small>{itemShortLabel(cell.itemType)}</small>
-                          </>
-                        ) : (
-                          <span className="feather-board-empty">—</span>
-                        )}
-                      </td>
-                    ))}
+      <div className="feather-board-scroll">
+        <div className="feather-board-columns">
+          {columns.map((columnPages, colIndex) => (
+            <div key={colIndex} className="feather-board-column">
+              <h3 className="feather-board-column-title">{pageRangeLabel(columnPages)}</h3>
+              <table className="feather-board-table">
+                <thead>
+                  <tr>
+                    <th>PG</th>
+                    <th>1</th>
+                    <th>2</th>
+                    <th>3</th>
+                    <th>4</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
+                </thead>
+                <tbody>
+                  {columnPages.map(page => (
+                    <tr key={page.pageNumber}>
+                      <td className="feather-board-pg">
+                        <span>{page.pageNumber}</span>
+                      </td>
+                      {page.rows.map((cell, rowIndex) => (
+                        <td
+                          key={rowIndex}
+                          className={cell ? (cell.isFfa ? 'ffa-cell' : `item-cell item-${cell.itemType}`) : undefined}
+                        >
+                          {cell ? (
+                            <div className="feather-board-cell">
+                              <span className="feather-board-name" title={cell.name}>
+                                {displayBoardName(cell.name)}
+                              </span>
+                              <span className={`feather-board-badge badge-${cell.itemType}`}>
+                                {itemShortLabel(cell.itemType)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="feather-board-empty">—</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

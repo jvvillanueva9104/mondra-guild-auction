@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation'
 import { EventBanner } from '@/components/EventBanner'
 import { FeatherProtocolBoard } from '@/components/FeatherProtocolBoard'
 import { useEvent } from '@/hooks/useEvent'
+import { downloadBoardPng } from '@/lib/export-board'
+import { errorMessage } from '@/lib/errors'
 import { useSupabase } from '@/lib/supabase'
 import { RewardType } from '@/lib/types'
 
@@ -35,6 +37,7 @@ export default function ResultsPage() {
   const { event, loading: eventLoading } = useEvent(id)
   const [results, setResults] = useState<Result[]>([])
   const [view, setView] = useState<'board' | 'table'>('board')
+  const [downloading, setDownloading] = useState(false)
 
   async function load() {
     if (!supabase) return
@@ -73,6 +76,21 @@ export default function ResultsPage() {
   async function copyDiscord() {
     await navigator.clipboard.writeText(discordText)
     alert('Copied')
+  }
+
+  async function downloadBoardImage() {
+    if (!event || !results.length) return
+    setDownloading(true)
+    try {
+      await downloadBoardPng(
+        'feather-board-export',
+        `mondra-${event.type}-${event.event_date}-board.png`,
+      )
+    } catch (e: unknown) {
+      alert(errorMessage(e, 'Could not create image'))
+    } finally {
+      setDownloading(false)
+    }
   }
 
   function downloadCsv() {
@@ -131,6 +149,14 @@ export default function ResultsPage() {
           Table view
         </button>
         <button onClick={copyDiscord} disabled={!results.length}>Copy for Discord</button>
+        <button
+          className="secondary"
+          onClick={downloadBoardImage}
+          disabled={!results.length || downloading || view !== 'board'}
+          title={view !== 'board' ? 'Switch to Board view to download image' : undefined}
+        >
+          {downloading ? 'Creating image…' : 'Download PNG'}
+        </button>
         <button className="secondary" onClick={downloadCsv} disabled={!results.length}>Export CSV</button>
         <Link className="btn secondary" href="/">Back to Events</Link>
       </div>
@@ -138,6 +164,7 @@ export default function ResultsPage() {
 
     {view === 'board' ? (
       <section className="card feather-board-wrap">
+        <p className="muted feather-board-hint">Scroll sideways to see all page columns. Download PNG for Discord.</p>
         <FeatherProtocolBoard event={event} results={boardResults} />
       </section>
     ) : (
