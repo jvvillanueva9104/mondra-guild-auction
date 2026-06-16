@@ -26,6 +26,26 @@ export default function Home() {
 
   async function createEvent() {
     if (!supabase) return
+
+    const { data: existingDrafts, error: lookupError } = await supabase
+      .from('events')
+      .select('id, type, event_date, status')
+      .eq('status', 'draft')
+      .eq('event_date', eventDate)
+
+    if (lookupError) return alert(lookupError.message)
+
+    if (existingDrafts?.length) {
+      const list = existingDrafts.map(e => `${e.type} · ${e.event_date}`).join(', ')
+      const ok = confirm(
+        `A draft already exists for ${eventDate}: ${list}.\n\n` +
+        'Creating another draft will post a new Discord check-in and stop recording reactions on the old one. ' +
+        'Delete the extra draft instead if it was a mistake.\n\n' +
+        'Create this draft anyway?',
+      )
+      if (!ok) return
+    }
+
     const { data: event, error } = await supabase.from('events').insert({ type, event_date: eventDate }).select().single()
     if (error) return alert(error.message)
     const defaults = emptyRewards(type)
@@ -66,6 +86,7 @@ export default function Home() {
       <p className="muted">
         Create the event before raid night for Discord check-in. Item totals are entered later on the event&apos;s Item Totals page.
         If the bot is running with a check-in channel configured, Discord check-in opens automatically when you create the draft.
+        Only create <b>one draft per raid night</b> — a second draft replaces the active Discord check-in.
       </p>
     </section>
     <section className="card">

@@ -73,17 +73,22 @@ function todayDate() {
 const checkinOpenInFlight = new Set()
 /** eventId → { messageId, channelId } when Discord post succeeded but DB write failed */
 const pendingCheckinSaves = new Map()
+let realtimeSubscribed = false
 
 async function saveCheckinMessage(eventId, message) {
-  const { error } = await supabase.from('events').update({
+  const { data, error } = await supabase.from('events').update({
     checkin_open: true,
     checkin_message_id: message.id,
     checkin_channel_id: message.channel.id,
-  }).eq('id', eventId)
+  }).eq('id', eventId).is('checkin_message_id', null).select('id').maybeSingle()
 
   if (error) {
     pendingCheckinSaves.set(eventId, { messageId: message.id, channelId: message.channel.id })
     throw error
+  }
+  if (!data) {
+    console.log(`Check-in message already linked for event ${eventId} — skipping duplicate save.`)
+    return
   }
   pendingCheckinSaves.delete(eventId)
 }
@@ -287,16 +292,18 @@ async function autoOpenCheckinForEvent(eventRecord) {
     return
   }
 
-  const channel = await getCheckinChannel()
-  if (!channel) {
-    console.log(
-      `Draft created (${eventRecord.type} · ${eventRecord.event_date}) — set DISCORD_CHECKIN_CHANNEL_ID to auto-post check-in`,
-    )
-    return
-  }
-
+  // Claim before any await — Realtime + polling can fire together on INSERT.
   checkinOpenInFlight.add(eventRecord.id)
+
   try {
+    const channel = await getCheckinChannel()
+    if (!channel) {
+      console.log(
+        `Draft created (${eventRecord.type} · ${eventRecord.event_date}) — set DISCORD_CHECKIN_CHANNEL_ID to auto-post check-in`,
+      )
+      return
+    }
+
     const { data: fresh, error } = await supabase
       .from('events')
       .select('id, type, event_date, status, checkin_message_id')
@@ -346,8 +353,10 @@ function startDraftEventWatch() {
     })
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
+        realtimeSubscribed = true
         console.log('Watching for new draft events (Supabase Realtime)…')
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        realtimeSubscribed = false
         console.error(`Realtime ${status}:`, err?.message ?? 'unknown error')
         console.error('Run supabase/migrations/004_realtime_events.sql in Supabase SQL Editor.')
       } else if (status !== 'CLOSED') {
@@ -359,7 +368,9 @@ function startDraftEventWatch() {
 function startDraftEventPolling(intervalMs = 15000) {
   return setInterval(() => {
     retryPendingCheckinSaves().catch(err => console.error('Check-in save retry failed:', err.message))
-    catchUpDraftCheckins().catch(err => console.error('Check-in poll failed:', err.message))
+    if (!realtimeSubscribed) {
+      catchUpDraftCheckins().catch(err => console.error('Check-in poll failed:', err.message))
+    }
     getOpenCheckinEvent()
       .then(event => event ? syncCheckinReactions(event) : 0)
       .catch(err => console.error('Reaction sync failed:', err.message))
