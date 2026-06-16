@@ -69,6 +69,39 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
+/** Prevent duplicate Discord posts while Supabase save is in flight or retrying. */
+const checkinOpenInFlight = new Set()
+/** eventId → { messageId, channelId } when Discord post succeeded but DB write failed */
+const pendingCheckinSaves = new Map()
+
+async function saveCheckinMessage(eventId, message) {
+  const { error } = await supabase.from('events').update({
+    checkin_open: true,
+    checkin_message_id: message.id,
+    checkin_channel_id: message.channel.id,
+  }).eq('id', eventId)
+
+  if (error) {
+    pendingCheckinSaves.set(eventId, { messageId: message.id, channelId: message.channel.id })
+    throw error
+  }
+  pendingCheckinSaves.delete(eventId)
+}
+
+async function retryPendingCheckinSaves() {
+  for (const [eventId, pending] of [...pendingCheckinSaves.entries()]) {
+    const { error } = await supabase.from('events').update({
+      checkin_open: true,
+      checkin_message_id: pending.messageId,
+      checkin_channel_id: pending.channelId,
+    }).eq('id', eventId)
+    if (!error) {
+      pendingCheckinSaves.delete(eventId)
+      console.log(`Recovered check-in message link for event ${eventId}`)
+    }
+  }
+}
+
 async function findMemberByDiscordId(discordId) {
   const { data } = await supabase.from('members').select('id, name').eq('discord_id', discordId).maybeSingle()
   return data
@@ -214,11 +247,7 @@ async function openCheckin(event, channel) {
   const message = await channel.send({ embeds: [embed] })
   await message.react(CHECKIN_EMOJI)
 
-  await supabase.from('events').update({
-    checkin_open: true,
-    checkin_message_id: message.id,
-    checkin_channel_id: message.channel.id,
-  }).eq('id', event.id)
+  await saveCheckinMessage(event.id, message)
 
   const updated = { ...event, checkin_message_id: message.id, checkin_channel_id: message.channel.id }
   await syncCheckinReactions(updated, { logEach: true })
@@ -247,6 +276,16 @@ async function getCheckinChannel() {
 async function autoOpenCheckinForEvent(eventRecord) {
   if (eventRecord.status !== 'draft') return
   if (eventRecord.checkin_message_id) return
+  if (checkinOpenInFlight.has(eventRecord.id)) return
+
+  const today = todayDate()
+  if (eventRecord.event_date !== today) {
+    console.log(
+      `Skipping auto check-in for ${eventRecord.type} · ${eventRecord.event_date} — not today (${today}). ` +
+      'Delete old drafts on the website or use /start-checkin to open manually.',
+    )
+    return
+  }
 
   const channel = await getCheckinChannel()
   if (!channel) {
@@ -256,26 +295,40 @@ async function autoOpenCheckinForEvent(eventRecord) {
     return
   }
 
-  const { data: fresh, error } = await supabase
-    .from('events')
-    .select('id, type, event_date, status, checkin_message_id')
-    .eq('id', eventRecord.id)
-    .single()
-  if (error) throw error
-  if (!fresh || fresh.checkin_message_id || fresh.status !== 'draft') return
+  checkinOpenInFlight.add(eventRecord.id)
+  try {
+    const { data: fresh, error } = await supabase
+      .from('events')
+      .select('id, type, event_date, status, checkin_message_id')
+      .eq('id', eventRecord.id)
+      .single()
+    if (error) throw error
+    if (!fresh || fresh.checkin_message_id || fresh.status !== 'draft') return
 
-  await openCheckin(fresh, channel)
-  console.log(`Auto check-in posted for ${fresh.type} · ${fresh.event_date} in #${channel.name}`)
+    await openCheckin(fresh, channel)
+    console.log(`Auto check-in posted for ${fresh.type} · ${fresh.event_date} in #${channel.name}`)
+  } catch (err) {
+    console.error(`Auto check-in failed for ${eventRecord.type} · ${eventRecord.event_date}:`, err.message)
+    if (pendingCheckinSaves.has(eventRecord.id)) {
+      console.error('Discord message was posted but Supabase save failed — will retry linking, not repost.')
+    }
+  } finally {
+    checkinOpenInFlight.delete(eventRecord.id)
+  }
 }
 
 async function catchUpDraftCheckins() {
   if (!DISCORD_CHECKIN_CHANNEL_ID) return
 
+  await retryPendingCheckinSaves()
+
+  const today = todayDate()
   const { data, error } = await supabase
     .from('events')
     .select('id, type, event_date, status, checkin_message_id')
     .eq('status', 'draft')
     .is('checkin_message_id', null)
+    .eq('event_date', today)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -305,6 +358,7 @@ function startDraftEventWatch() {
 
 function startDraftEventPolling(intervalMs = 15000) {
   return setInterval(() => {
+    retryPendingCheckinSaves().catch(err => console.error('Check-in save retry failed:', err.message))
     catchUpDraftCheckins().catch(err => console.error('Check-in poll failed:', err.message))
     getOpenCheckinEvent()
       .then(event => event ? syncCheckinReactions(event) : 0)
