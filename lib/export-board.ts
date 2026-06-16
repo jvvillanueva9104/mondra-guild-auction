@@ -42,9 +42,14 @@ export async function downloadBoardPng(elementId: string, filename: string) {
   const restoreOverflow = unlockOverflow(node)
 
   try {
+    const width = Math.ceil(node.scrollWidth)
+    const height = Math.ceil(node.scrollHeight)
+
     const dataUrl = await toPng(node, {
       backgroundColor: '#0a0a0a',
       pixelRatio: 2,
+      width,
+      height,
       cacheBust: true,
     })
 
