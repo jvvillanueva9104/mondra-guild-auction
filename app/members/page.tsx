@@ -50,6 +50,41 @@ export default function MembersPage() {
     else load()
   }
 
+  async function removeMembersFromDb(ids: string[]) {
+    if (!supabase || ids.length === 0) return
+
+    const { error: attendanceError } = await supabase.from('attendance').delete().in('member_id', ids)
+    if (attendanceError) throw attendanceError
+
+    const { error: participantsError } = await supabase.from('event_participants').delete().in('member_id', ids)
+    if (participantsError) throw participantsError
+
+    const { error: allocationsError } = await supabase
+      .from('auction_allocations')
+      .update({ member_id: null })
+      .in('member_id', ids)
+    if (allocationsError) throw allocationsError
+
+    const { error } = await supabase.from('members').delete().in('id', ids)
+    if (error) throw error
+  }
+
+  async function removeMember(member: Member) {
+    if (!supabase) return
+    if (!confirm(
+      `Remove ${member.name}? This clears their attendance and auction pool links. ` +
+      'Past generated results keep allocation rows but lose their name where assigned. ' +
+      'They will be re-added if they react on Discord check-in again.',
+    )) return
+
+    try {
+      await removeMembersFromDb([member.id])
+      load()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Could not remove member')
+    }
+  }
+
   async function removeAllMembers() {
     if (!supabase || !members.length) return
     const label = `${members.length} member${members.length === 1 ? '' : 's'}`
@@ -59,22 +94,12 @@ export default function MembersPage() {
       'Discord check-in will re-add members when they react again.',
     )) return
 
-    const ids = members.map(m => m.id)
-    const { error: attendanceError } = await supabase.from('attendance').delete().in('member_id', ids)
-    if (attendanceError) return alert(attendanceError.message)
-
-    const { error: participantsError } = await supabase.from('event_participants').delete().in('member_id', ids)
-    if (participantsError) return alert(participantsError.message)
-
-    const { error: allocationsError } = await supabase
-      .from('auction_allocations')
-      .update({ member_id: null })
-      .in('member_id', ids)
-    if (allocationsError) return alert(allocationsError.message)
-
-    const { error } = await supabase.from('members').delete().in('id', ids)
-    if (error) return alert(error.message)
-    load()
+    try {
+      await removeMembersFromDb(members.map(m => m.id))
+      load()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Could not remove members')
+    }
   }
 
   if (!supabase) return <main><p className="muted">Loading…</p></main>
@@ -92,7 +117,8 @@ export default function MembersPage() {
         )}
       </div>
       <p className="muted">
-        Test names or old Discord check-ins can be cleared here. Members are recreated automatically when they react on Discord again.
+        Remove someone who left the guild with the row action, or clear test names with Remove all.
+        Members are recreated automatically when they react on Discord again.
       </p>
     </section>
     <section className="card">
@@ -113,6 +139,7 @@ export default function MembersPage() {
                 Auction Eligible
               </label>
             </th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -138,6 +165,11 @@ export default function MembersPage() {
                   checked={m.is_auction_eligible}
                   onChange={e => update(m.id, { is_auction_eligible: e.target.checked })}
                 />
+              </td>
+              <td>
+                <button type="button" className="danger secondary" onClick={() => removeMember(m)}>
+                  Remove
+                </button>
               </td>
             </tr>
           ))}
