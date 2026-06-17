@@ -523,6 +523,48 @@ input:disabled, button:disabled {
   line-height: 1;
 }
 
+.feather-board-chunk-export {
+  width: 540px;
+  max-width: none;
+  padding: 20px 18px 24px;
+  background: linear-gradient(180deg, var(--guild-black) 0%, var(--guild-black-soft) 100%);
+}
+
+.feather-board-chunk-export .feather-board-header {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+}
+
+.feather-board-chunk-export .feather-board-column-title {
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.feather-board-chunk-export .feather-board-table th {
+  padding: 14px 8px;
+  font-size: 12px;
+}
+
+.feather-board-chunk-export .feather-board-table {
+  --feather-row-min: 92px;
+}
+
+.feather-board-chunk-export .feather-board-name {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.feather-board-chunk-export .feather-board-badge {
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.feather-board-chunk-export .feather-board-pg span {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   .feather-board-columns {
     grid-template-columns: 1fr;

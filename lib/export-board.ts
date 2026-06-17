@@ -14,6 +14,12 @@ async function waitForImages(root: HTMLElement) {
   )
 }
 
+function waitForPaint() {
+  return new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
 function unlockOverflow(node: HTMLElement) {
   const restored: { el: HTMLElement; overflow: string; overflowY: string }[] = []
   let el: HTMLElement | null = node
@@ -31,13 +37,24 @@ function unlockOverflow(node: HTMLElement) {
   }
 }
 
-export async function downloadBoardPng(elementId: string, filename: string) {
-  const node = document.getElementById(elementId)
-  if (!node) throw new Error('Board not found')
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
 
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const link = document.createElement('a')
+  link.download = filename
+  link.href = dataUrl
+  link.click()
+}
+
+async function captureElementPng(node: HTMLElement, pixelRatio: number): Promise<string> {
   node.scrollIntoView({ block: 'start' })
   await waitForImages(node)
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  await waitForPaint()
 
   const restoreOverflow = unlockOverflow(node)
 
@@ -45,19 +62,70 @@ export async function downloadBoardPng(elementId: string, filename: string) {
     const width = Math.ceil(node.scrollWidth)
     const height = Math.ceil(node.scrollHeight)
 
-    const dataUrl = await toPng(node, {
+    return await toPng(node, {
       backgroundColor: '#0a0a0a',
-      pixelRatio: 2,
+      pixelRatio,
       width,
       height,
       cacheBust: true,
     })
-
-    const link = document.createElement('a')
-    link.download = filename
-    link.href = dataUrl
-    link.click()
   } finally {
     restoreOverflow()
+  }
+}
+
+export async function downloadBoardPng(elementId: string, filename: string) {
+  const node = document.getElementById(elementId)
+  if (!node) throw new Error('Board not found')
+
+  const dataUrl = await captureElementPng(node, 2)
+  downloadDataUrl(dataUrl, filename)
+}
+
+type ChunkProgress = (current: number, total: number) => void
+
+export async function downloadBoardChunksForDiscord(
+  boardId: string,
+  filenameBase: string,
+  onProgress?: ChunkProgress,
+) {
+  const board = document.getElementById(boardId)
+  if (!board) throw new Error('Board not found')
+
+  const columns = Array.from(board.querySelectorAll<HTMLElement>('.feather-board-column'))
+  if (!columns.length) throw new Error('No board sections found')
+
+  const header = board.querySelector<HTMLElement>('.feather-board-header')
+
+  for (let i = 0; i < columns.length; i++) {
+    const column = columns[i]
+    const title =
+      column.querySelector('.feather-board-column-title')?.textContent?.trim() ??
+      `part-${i + 1}`
+    const slug = slugify(title) || `part-${i + 1}`
+
+    const wrapper = document.createElement('div')
+    wrapper.className = 'feather-board feather-board-chunk-export'
+    wrapper.style.position = 'fixed'
+    wrapper.style.left = '-99999px'
+    wrapper.style.top = '0'
+    wrapper.style.zIndex = '-1'
+
+    if (header) wrapper.appendChild(header.cloneNode(true))
+    wrapper.appendChild(column.cloneNode(true))
+    document.body.appendChild(wrapper)
+
+    try {
+      const dataUrl = await captureElementPng(wrapper, 3)
+      downloadDataUrl(dataUrl, `${filenameBase}-${slug}.png`)
+    } finally {
+      document.body.removeChild(wrapper)
+    }
+
+    onProgress?.(i + 1, columns.length)
+
+    if (i < columns.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 450))
+    }
   }
 }
