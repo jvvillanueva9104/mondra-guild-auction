@@ -57,7 +57,9 @@ export function buildBoardPages(results: ResultLike[]): BoardPage[] {
   return pages
 }
 
-export function chunkBoardPages(pages: BoardPage[], chunkSize = 10): BoardPage[][] {
+export const BOARD_PAGES_PER_CHUNK = 20
+
+export function chunkBoardPages(pages: BoardPage[], chunkSize = BOARD_PAGES_PER_CHUNK): BoardPage[][] {
   const chunks: BoardPage[][] = []
   for (let i = 0; i < pages.length; i += chunkSize) {
     chunks.push(pages.slice(i, i + chunkSize))

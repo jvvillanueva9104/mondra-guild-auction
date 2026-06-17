@@ -52,7 +52,7 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 async function captureElementPng(node: HTMLElement, pixelRatio: number): Promise<string> {
-  node.scrollIntoView({ block: 'start' })
+  node.scrollIntoView({ block: 'center' })
   await waitForImages(node)
   await waitForPaint()
 
@@ -101,10 +101,6 @@ export async function downloadBoardChunksForDiscord(
   const columns = Array.from(board.querySelectorAll<HTMLElement>('.feather-board-column'))
   if (!columns.length) throw new Error('No board sections found')
 
-  const savedDisplays = columns.map(col => col.style.display)
-
-  board.classList.add('feather-board-exporting')
-
   try {
     for (let i = 0; i < columns.length; i++) {
       const column = columns[i]
@@ -113,16 +109,14 @@ export async function downloadBoardChunksForDiscord(
         `part-${i + 1}`
       const slug = slugify(title) || `part-${i + 1}`
 
-      columns.forEach((col, idx) => {
-        col.style.display = idx === i ? '' : 'none'
-      })
-      board.setAttribute('data-export-chunk', String(i))
-
+      column.classList.add('feather-board-column-exporting')
       await waitForPaint()
-      void board.offsetHeight
+      void column.offsetHeight
 
-      const dataUrl = await captureElementPng(board, 3)
+      const dataUrl = await captureElementPng(column, 3)
       downloadDataUrl(dataUrl, `${filenameBase}-${slug}.png`)
+
+      column.classList.remove('feather-board-column-exporting')
 
       onProgress?.(i + 1, columns.length)
 
@@ -131,10 +125,6 @@ export async function downloadBoardChunksForDiscord(
       }
     }
   } finally {
-    board.classList.remove('feather-board-exporting')
-    board.removeAttribute('data-export-chunk')
-    columns.forEach((col, idx) => {
-      col.style.display = savedDisplays[idx]
-    })
+    columns.forEach(column => column.classList.remove('feather-board-column-exporting'))
   }
 }

@@ -523,47 +523,72 @@ input:disabled, button:disabled {
   line-height: 1;
 }
 
-.feather-board.feather-board-exporting {
+.feather-board-export-header {
+  display: none;
+}
+
+.feather-board-column.feather-board-column-exporting {
+  position: relative;
+  z-index: 2;
   width: 540px;
   max-width: none;
-  padding: 20px 18px 24px;
+  padding: 18px 16px 20px;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--guild-black) 0%, var(--guild-black-soft) 100%);
 }
 
-.feather-board.feather-board-exporting .feather-board-columns {
-  grid-template-columns: 1fr;
-  display: block;
+.feather-board-column.feather-board-column-exporting .feather-board-export-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--guild-red-dark);
 }
 
-.feather-board.feather-board-exporting .feather-board-header {
-  margin-bottom: 18px;
-  padding-bottom: 14px;
+.feather-board-export-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--guild-gray);
 }
 
-.feather-board.feather-board-exporting .feather-board-column-title {
+.feather-board-export-header-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--guild-red);
+  text-transform: uppercase;
+}
+
+.feather-board-column.feather-board-column-exporting .feather-board-column-title {
   margin-bottom: 14px;
   font-size: 13px;
 }
 
-.feather-board.feather-board-exporting .feather-board-table th {
+.feather-board-column.feather-board-column-exporting .feather-board-table th {
   padding: 14px 8px;
   font-size: 12px;
 }
 
-.feather-board.feather-board-exporting .feather-board-table {
-  --feather-row-min: 92px;
+.feather-board-column.feather-board-column-exporting .feather-board-table {
+  --feather-row-min: 88px;
 }
 
-.feather-board.feather-board-exporting .feather-board-name {
+.feather-board-column.feather-board-column-exporting .feather-board-name {
   font-size: 14px;
   line-height: 1.45;
 }
 
-.feather-board.feather-board-exporting .feather-board-badge {
+.feather-board-column.feather-board-column-exporting .feather-board-badge {
   font-size: 11px;
   padding: 5px 12px;
 }
 
-.feather-board.feather-board-exporting .feather-board-pg span {
+.feather-board-column.feather-board-column-exporting .feather-board-pg span {
   width: 36px;
   height: 36px;
   font-size: 13px;

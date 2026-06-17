@@ -1,4 +1,11 @@
-import { buildBoardPages, chunkBoardPages, displayBoardName, itemShortLabel, pageRangeLabel } from '@/lib/board'
+import {
+  BOARD_PAGES_PER_CHUNK,
+  buildBoardPages,
+  chunkBoardPages,
+  displayBoardName,
+  itemShortLabel,
+  pageRangeLabel,
+} from '@/lib/board'
 import { Event } from '@/lib/types'
 
 type ResultLike = {
@@ -17,7 +24,7 @@ type Props = {
 
 export function FeatherProtocolBoard({ event, results, exportId = 'feather-board-export' }: Props) {
   const pages = buildBoardPages(results)
-  const columns = chunkBoardPages(pages, 10)
+  const columns = chunkBoardPages(pages, BOARD_PAGES_PER_CHUNK)
   const totalPages = pages.length
 
   if (!pages.length) {
@@ -40,6 +47,13 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
       <div className="feather-board-columns">
         {columns.map((columnPages, colIndex) => (
           <div key={colIndex} className="feather-board-column">
+            <div className="feather-board-export-header" aria-hidden="true">
+              <img src="/mondragon-icon.png" alt="" className="feather-board-logo" width={32} height={32} />
+              <div className="feather-board-export-header-text">
+                <span className="feather-board-export-header-title">Mondra ROOC</span>
+                <span>{event.type} · {event.event_date}</span>
+              </div>
+            </div>
             <h3 className="feather-board-column-title">{pageRangeLabel(columnPages)}</h3>
             <table className="feather-board-table">
               <thead>

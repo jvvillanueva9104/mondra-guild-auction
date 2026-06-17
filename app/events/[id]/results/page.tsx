@@ -194,7 +194,7 @@ export default function ResultsPage() {
     {view === 'board' ? (
       <section className="card feather-board-wrap">
         <p className="muted feather-board-hint">
-          For Discord, use <strong>Download for Discord</strong> — one image per page group (e.g. PAGES 1–10, 11–20).
+          For Discord, use <strong>Download for Discord</strong> — one image per 20 pages (e.g. PAGES 1–20, 21–40).
           Post each image as its own message so members can read it without zooming.
         </p>
         <FeatherProtocolBoard event={event} results={boardResults} />
