@@ -399,13 +399,13 @@ input:disabled, button:disabled {
   border-collapse: collapse;
   table-layout: fixed;
   background: transparent;
+  --feather-row-min: 84px;
 }
 
 .feather-board-table th,
 .feather-board-table td {
   border: 1px solid var(--guild-border-light);
   text-align: center;
-  vertical-align: middle;
 }
 
 .feather-board-table th {
@@ -414,24 +414,45 @@ input:disabled, button:disabled {
   font-size: 11px;
   letter-spacing: 0.1em;
   font-weight: 700;
-  padding: 10px 6px;
+  padding: 12px 8px;
+  vertical-align: middle;
 }
 
-.feather-board-table td {
+.feather-board-table th:first-child,
+.feather-board-pg {
+  width: 52px;
+}
+
+.feather-board-table tbody td {
   background: rgba(22, 22, 22, 0.95);
   height: 1px;
   padding: 0;
   vertical-align: top;
 }
 
+.feather-board-row-label,
+.feather-board-cell {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: var(--feather-row-min);
+}
+
+.feather-board-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 6px;
+}
+
 .feather-board-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100%;
-  min-height: 68px;
-  padding: 8px 6px;
-  box-sizing: border-box;
+  padding: 12px 10px 14px;
+}
+
+.feather-board-cell--empty {
+  justify-content: center;
 }
 
 .feather-board-name {
@@ -439,18 +460,22 @@ input:disabled, button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-height: 0;
+  padding: 0 4px;
   text-align: center;
   color: var(--guild-white);
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   word-break: break-word;
 }
 
 .feather-board-badge {
   flex: 0 0 auto;
+  margin-top: 10px;
   display: inline-block;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
@@ -475,7 +500,6 @@ input:disabled, button:disabled {
 }
 
 .feather-board-pg {
-  width: 48px;
   background: var(--guild-black-soft) !important;
 }
 
@@ -483,8 +507,9 @@ input:disabled, button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--guild-red-dark);
   border-radius: 999px;
   color: var(--guild-red-bright);
@@ -494,6 +519,8 @@ input:disabled, button:disabled {
 
 .feather-board-empty {
   color: var(--guild-gray-dark);
+  font-size: 16px;
+  line-height: 1;
 }
 
 @media (max-width: 980px) {

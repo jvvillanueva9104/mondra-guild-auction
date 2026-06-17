@@ -55,7 +55,9 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
                 {columnPages.map(page => (
                   <tr key={page.pageNumber}>
                     <td className="feather-board-pg">
-                      <span>{page.pageNumber}</span>
+                      <div className="feather-board-row-label">
+                        <span>{page.pageNumber}</span>
+                      </div>
                     </td>
                     {page.rows.map((cell, rowIndex) => (
                       <td
@@ -72,7 +74,9 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
                             </span>
                           </div>
                         ) : (
-                          <span className="feather-board-empty">—</span>
+                          <div className="feather-board-cell feather-board-cell--empty">
+                            <span className="feather-board-empty">—</span>
+                          </div>
                         )}
                       </td>
                     ))}
