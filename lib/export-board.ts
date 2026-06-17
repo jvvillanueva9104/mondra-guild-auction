@@ -56,11 +56,17 @@ async function captureElementPng(node: HTMLElement, pixelRatio: number): Promise
   await waitForImages(node)
   await waitForPaint()
 
+  void node.offsetHeight
+
   const restoreOverflow = unlockOverflow(node)
 
   try {
     const width = Math.ceil(node.scrollWidth)
     const height = Math.ceil(node.scrollHeight)
+
+    if (width <= 0 || height <= 0) {
+      throw new Error('Board section has no visible size')
+    }
 
     return await toPng(node, {
       backgroundColor: '#0a0a0a',
@@ -95,37 +101,40 @@ export async function downloadBoardChunksForDiscord(
   const columns = Array.from(board.querySelectorAll<HTMLElement>('.feather-board-column'))
   if (!columns.length) throw new Error('No board sections found')
 
-  const header = board.querySelector<HTMLElement>('.feather-board-header')
+  const savedDisplays = columns.map(col => col.style.display)
 
-  for (let i = 0; i < columns.length; i++) {
-    const column = columns[i]
-    const title =
-      column.querySelector('.feather-board-column-title')?.textContent?.trim() ??
-      `part-${i + 1}`
-    const slug = slugify(title) || `part-${i + 1}`
+  board.classList.add('feather-board-exporting')
 
-    const wrapper = document.createElement('div')
-    wrapper.className = 'feather-board feather-board-chunk-export'
-    wrapper.style.position = 'fixed'
-    wrapper.style.left = '-99999px'
-    wrapper.style.top = '0'
-    wrapper.style.zIndex = '-1'
+  try {
+    for (let i = 0; i < columns.length; i++) {
+      const column = columns[i]
+      const title =
+        column.querySelector('.feather-board-column-title')?.textContent?.trim() ??
+        `part-${i + 1}`
+      const slug = slugify(title) || `part-${i + 1}`
 
-    if (header) wrapper.appendChild(header.cloneNode(true))
-    wrapper.appendChild(column.cloneNode(true))
-    document.body.appendChild(wrapper)
+      columns.forEach((col, idx) => {
+        col.style.display = idx === i ? '' : 'none'
+      })
+      board.setAttribute('data-export-chunk', String(i))
 
-    try {
-      const dataUrl = await captureElementPng(wrapper, 3)
+      await waitForPaint()
+      void board.offsetHeight
+
+      const dataUrl = await captureElementPng(board, 3)
       downloadDataUrl(dataUrl, `${filenameBase}-${slug}.png`)
-    } finally {
-      document.body.removeChild(wrapper)
-    }
 
-    onProgress?.(i + 1, columns.length)
+      onProgress?.(i + 1, columns.length)
 
-    if (i < columns.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 450))
+      if (i < columns.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
     }
+  } finally {
+    board.classList.remove('feather-board-exporting')
+    board.removeAttribute('data-export-chunk')
+    columns.forEach((col, idx) => {
+      col.style.display = savedDisplays[idx]
+    })
   }
 }

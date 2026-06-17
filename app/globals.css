@@ -523,43 +523,47 @@ input:disabled, button:disabled {
   line-height: 1;
 }
 
-.feather-board-chunk-export {
+.feather-board.feather-board-exporting {
   width: 540px;
   max-width: none;
   padding: 20px 18px 24px;
-  background: linear-gradient(180deg, var(--guild-black) 0%, var(--guild-black-soft) 100%);
 }
 
-.feather-board-chunk-export .feather-board-header {
+.feather-board.feather-board-exporting .feather-board-columns {
+  grid-template-columns: 1fr;
+  display: block;
+}
+
+.feather-board.feather-board-exporting .feather-board-header {
   margin-bottom: 18px;
   padding-bottom: 14px;
 }
 
-.feather-board-chunk-export .feather-board-column-title {
+.feather-board.feather-board-exporting .feather-board-column-title {
   margin-bottom: 14px;
   font-size: 13px;
 }
 
-.feather-board-chunk-export .feather-board-table th {
+.feather-board.feather-board-exporting .feather-board-table th {
   padding: 14px 8px;
   font-size: 12px;
 }
 
-.feather-board-chunk-export .feather-board-table {
+.feather-board.feather-board-exporting .feather-board-table {
   --feather-row-min: 92px;
 }
 
-.feather-board-chunk-export .feather-board-name {
+.feather-board.feather-board-exporting .feather-board-name {
   font-size: 14px;
   line-height: 1.45;
 }
 
-.feather-board-chunk-export .feather-board-badge {
+.feather-board.feather-board-exporting .feather-board-badge {
   font-size: 11px;
   padding: 5px 12px;
 }
 
-.feather-board-chunk-export .feather-board-pg span {
+.feather-board.feather-board-exporting .feather-board-pg span {
   width: 36px;
   height: 36px;
   font-size: 13px;
