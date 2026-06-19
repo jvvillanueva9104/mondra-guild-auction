@@ -4,6 +4,7 @@ export type BoardCell = {
   name: string
   itemType: RewardType
   isFfa: boolean
+  isDesignated?: boolean
 }
 
 export type BoardPage = {
@@ -28,6 +29,7 @@ type ResultLike = {
   item_type: RewardType
   member_id: string | null
   name: string
+  is_designated?: boolean
 }
 
 export function buildBoardPages(results: ResultLike[]): BoardPage[] {
@@ -43,6 +45,7 @@ export function buildBoardPages(results: ResultLike[]): BoardPage[] {
       name: r.name,
       itemType: r.item_type,
       isFfa: !r.member_id,
+      isDesignated: r.is_designated ?? false,
     })
   }
 

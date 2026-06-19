@@ -32,6 +32,7 @@ export function useEvent(eventId: string) {
     loading: loading || !supabase,
     editable: event?.status === 'draft',
     locked: event?.status === 'locked',
+    designatedLocked: event?.status === 'designated',
     generated: event?.status === 'generated',
   }
 }

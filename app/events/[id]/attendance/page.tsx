@@ -124,7 +124,10 @@ export default function AttendancePage() {
           <Link className="btn secondary" href={`/events/${id}/rewards`}>Item Totals</Link>
         )}
         {event.status === 'locked' && (
-          <Link className="btn" href={`/events/${id}/generate`}>Go to Generate</Link>
+          <Link className="btn" href={`/events/${id}/designated`}>Designated bidders</Link>
+        )}
+        {event.status === 'designated' && (
+          <Link className="btn" href={`/events/${id}/generate`}>Generate board</Link>
         )}
       </div>
     </section>

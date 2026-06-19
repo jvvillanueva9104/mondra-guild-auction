@@ -6,6 +6,7 @@ import {
   splitPassMembers,
 } from './rotation'
 import { DEFAULT_PER_MEMBER_CAPS } from './reward-defaults'
+import { buildDesignatedMap, designatedReserveForCount, DesignatedAssignment } from './designated'
 import { Allocation, EventReward, EventType, Member, RewardType } from './types'
 
 export { seededShuffle } from './shuffle'
@@ -51,13 +52,28 @@ function makeAllocation(
   itemType: RewardType,
   slotIndex: number,
   memberId: string | null,
+  isDesignated = false,
 ): Allocation {
   return {
     event_id: eventId,
     member_id: memberId,
     item_type: itemType,
+    is_designated: isDesignated,
     ...slotMeta(slotIndex),
   }
+}
+
+function assignDesignatedTail(
+  eventId: string,
+  itemType: RewardType,
+  startSlotIndex: number,
+  designatedCount: number,
+  designatedSlots: Map<number, string>,
+): Allocation[] {
+  return Array.from({ length: designatedCount }, (_, i) => {
+    const memberId = designatedSlots.get(i) ?? null
+    return makeAllocation(eventId, itemType, startSlotIndex + i, memberId, true)
+  })
 }
 
 function assignOneEachFirst(
@@ -221,12 +237,14 @@ export function generateAllocations(
   rewards: EventReward[],
   ctx: RotationContext,
   heldTurns: Map<string, Set<RewardType>>,
+  designatedRows: DesignatedAssignment[] = [],
 ): GenerateResult {
   if (eligibleMembers.length === 0) throw new Error('No online eligible members')
 
   const slots = buildRewardSlots(rewards)
   if (slots.length === 0) throw new Error('No reward slots configured')
 
+  const designatedByType = buildDesignatedMap(designatedRows)
   const allocations: Allocation[] = []
   const dueForNext: Record<string, string | null> = {}
   let slotIndex = 0
@@ -241,7 +259,15 @@ export function generateAllocations(
       continue
     }
 
+    const designatedCount = designatedReserveForCount(itemType, count)
+    const normalCount = count - designatedCount
+    const designatedSlots = designatedByType.get(itemType) ?? new Map<number, string>()
+    const designatedMemberIds = new Set(
+      Array.from({ length: designatedCount }, (_, i) => designatedSlots.get(i)).filter(Boolean) as string[],
+    )
+
     const orderedMembers = rotationOrder(eligibleMembers, eventId, itemType, ctx, heldTurns)
+      .filter(m => !designatedMemberIds.has(m.id))
     const lastWinners = ctx.isFirstGeneratedEvent
       ? new Set<string>()
       : (ctx.lastEventWinners.get(itemType) ?? new Set<string>())
@@ -249,18 +275,29 @@ export function generateAllocations(
     let cap = rewardPerMemberCap(rewards, itemType, eventType)
     if (itemType === 'puppet') cap = 1
 
-    const batch = assignRotatingItem(
-      eventId,
-      orderedMembers,
-      itemType,
-      slotIndex,
-      count,
-      cap,
-      lastWinners,
-      itemType === 'light_dark' || itemType === 'time_space',
-    )
+    if (normalCount > 0) {
+      allocations.push(...assignRotatingItem(
+        eventId,
+        orderedMembers,
+        itemType,
+        slotIndex,
+        normalCount,
+        cap,
+        lastWinners,
+        itemType === 'light_dark' || itemType === 'time_space',
+      ))
+    }
 
-    allocations.push(...batch)
+    if (designatedCount > 0) {
+      allocations.push(...assignDesignatedTail(
+        eventId,
+        itemType,
+        slotIndex + normalCount,
+        designatedCount,
+        designatedSlots,
+      ))
+    }
+
     slotIndex += count
     dueForNext[itemType] = computeDueForNext(eligibleMembers, eventId, itemType, ctx, heldTurns)
   }

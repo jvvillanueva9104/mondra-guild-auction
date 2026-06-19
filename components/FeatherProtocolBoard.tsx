@@ -14,6 +14,7 @@ type ResultLike = {
   item_type: import('@/lib/types').RewardType
   member_id: string | null
   name: string
+  is_designated?: boolean
 }
 
 type Props = {
@@ -86,6 +87,11 @@ export function FeatherProtocolBoard({ event, results, exportId = 'feather-board
                             <span className="feather-board-badge">
                               {itemShortLabel(cell.itemType)}
                             </span>
+                            {cell.isDesignated && (
+                              <span className="feather-board-badge feather-board-badge-designated">
+                                Designated
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="feather-board-cell feather-board-cell--empty">

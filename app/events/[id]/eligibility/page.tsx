@@ -79,16 +79,6 @@ export default function EligibilityPage() {
     const onlineCount = rows.filter(r => r.is_online).length
     if (onlineCount === 0) return alert('Select at least one online member before locking.')
 
-    const { data: rewardRows, error: rewardError } = await supabase
-      .from('event_rewards')
-      .select('quantity')
-      .eq('event_id', id)
-    if (rewardError) return alert(rewardError.message)
-    const rewardTotal = (rewardRows ?? []).reduce((sum, row) => sum + row.quantity, 0)
-    if (rewardTotal === 0) {
-      return alert('Enter item totals before locking. Open Item Totals and save what the guild earned tonight.')
-    }
-
     await supabase.from('event_participants').delete().eq('event_id', id)
     const insertRows = rows.map(r => ({
       event_id: id,
@@ -107,7 +97,7 @@ export default function EligibilityPage() {
       .select()
       .single()
     if (error || !data) return alert('Could not lock event. It may already be locked or generated.')
-    router.push(`/events/${id}/generate`)
+    router.push(`/events/${id}/designated`)
   }
 
   if (eventLoading || !supabase) return <main><p className="muted">Loading…</p></main>
@@ -178,7 +168,10 @@ export default function EligibilityPage() {
           <Link className="btn secondary" href={`/events/${id}/attendance`}>Back to Attendance</Link>
         )}
         {event.status === 'locked' && (
-          <Link className="btn" href={`/events/${id}/generate`}>Go to Generate</Link>
+          <Link className="btn" href={`/events/${id}/designated`}>Designated Bidders</Link>
+        )}
+        {event.status === 'designated' && (
+          <Link className="btn" href={`/events/${id}/generate`}>Generate board</Link>
         )}
       </div>
     </section>

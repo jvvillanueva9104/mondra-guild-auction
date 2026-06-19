@@ -274,6 +274,11 @@ nav a:hover {
   border: 1px solid var(--guild-red);
 }
 
+.banner-designated {
+  background: rgba(196, 30, 58, 0.12);
+  border: 1px solid var(--guild-red-bright);
+}
+
 .banner-generated {
   background: var(--guild-red-dark);
   border: 1px solid var(--guild-red-bright);
@@ -485,6 +490,15 @@ input:disabled, button:disabled {
   background: var(--guild-red-muted);
   color: var(--guild-red-bright);
   border: 1px solid var(--guild-red-border);
+}
+
+.feather-board-badge-designated {
+  margin-top: 4px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  background: rgba(212, 175, 55, 0.15);
+  color: #f0d890;
+  border-color: rgba(212, 175, 55, 0.45);
 }
 
 .feather-board-table td.ffa-cell .feather-board-name {

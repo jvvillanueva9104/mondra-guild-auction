@@ -27,7 +27,7 @@ export default function RewardsPage() {
   const { id } = useParams<{ id: string }>()
   const supabase = useSupabase()
   const { event, loading: eventLoading } = useEvent(id)
-  const canEdit = event?.status !== 'generated'
+  const canEdit = event?.status === 'designated'
   const [rewards, setRewards] = useState<Record<RewardType, RewardFormRow> | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -70,8 +70,13 @@ export default function RewardsPage() {
     <EventBanner event={event} />
     <section className="card">
       <p>
-        Enter how many items the guild earned tonight. You can save this after the event — totals are not needed for check-in.
+        Enter how many items the guild earned tonight — do this when bidding starts, after designated bidders are locked.
       </p>
+      {event.status !== 'designated' && (
+        <p className="muted">
+          Item totals unlock after you lock the designated bidder list on the Designated Bidders page.
+        </p>
+      )}
       <p className="muted">
         Per-player limits can be adjusted here if tonight&apos;s ranking differs from the usual defaults.
       </p>
@@ -90,8 +95,11 @@ export default function RewardsPage() {
         )}
         <Link className="btn secondary" href={`/events/${id}/attendance`}>Attendance</Link>
         <Link className="btn secondary" href={`/events/${id}/eligibility`}>Auction Pool</Link>
+        {event.status === 'designated' && (
+          <Link className="btn" href={`/events/${id}/generate`}>Generate board</Link>
+        )}
         {event.status === 'locked' && (
-          <Link className="btn" href={`/events/${id}/generate`}>Generate</Link>
+          <Link className="btn secondary" href={`/events/${id}/designated`}>Designated bidders</Link>
         )}
       </div>
     </section>

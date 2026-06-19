@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 
 create type member_status as enum ('active', 'inactive', 'left');
 create type event_type as enum ('EO', 'GL');
-create type event_status as enum ('draft', 'locked', 'generated');
+create type event_status as enum ('draft', 'locked', 'designated', 'generated');
 create type reward_type as enum ('puppet', 'mvp', 'light_dark', 'time_space');
 
 create table members (
@@ -73,8 +73,21 @@ create table auction_allocations (
   item_type reward_type not null,
   slot_index int not null,
   page_number int not null,
-  row_number int not null
+  row_number int not null,
+  is_designated boolean not null default false
 );
+
+create table designated_bidders (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events(id) on delete cascade,
+  member_id uuid not null references members(id),
+  item_type reward_type not null,
+  slot_index int not null check (slot_index >= 0),
+  created_at timestamptz not null default now(),
+  unique (event_id, item_type, slot_index)
+);
+
+create index idx_designated_bidders_event on designated_bidders(event_id);
 
 create index idx_members_status on members(status);
 create unique index idx_members_discord_id on members(discord_id) where discord_id is not null;
@@ -91,6 +104,7 @@ grant select, insert, update, delete on public.attendance to anon, authenticated
 grant select, insert, update, delete on public.event_participants to anon, authenticated, service_role;
 grant select, insert, update, delete on public.allocation_runs to anon, authenticated, service_role;
 grant select, insert, update, delete on public.auction_allocations to anon, authenticated, service_role;
+grant select, insert, update, delete on public.designated_bidders to anon, authenticated, service_role;
 
 alter table members enable row level security;
 alter table events enable row level security;
@@ -99,6 +113,7 @@ alter table attendance enable row level security;
 alter table event_participants enable row level security;
 alter table allocation_runs enable row level security;
 alter table auction_allocations enable row level security;
+alter table designated_bidders enable row level security;
 
 create table officers (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -142,6 +157,8 @@ create policy "officers read runs" on allocation_runs for select using (is_offic
 create policy "officers write runs" on allocation_runs for all using (is_officer()) with check (is_officer());
 create policy "officers read allocations" on auction_allocations for select using (is_officer());
 create policy "officers write allocations" on auction_allocations for all using (is_officer()) with check (is_officer());
+create policy "officers read designated_bidders" on designated_bidders for select using (is_officer());
+create policy "officers write designated_bidders" on designated_bidders for all using (is_officer()) with check (is_officer());
 
 -- Discord bot auto check-in listens for new rows via Realtime.
 alter publication supabase_realtime add table public.events;

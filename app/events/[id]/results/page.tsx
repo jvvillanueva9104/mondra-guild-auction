@@ -16,6 +16,7 @@ type Result = {
   page_number: number
   row_number: number
   member_id: string | null
+  is_designated: boolean
   members: { name: string } | null
 }
 
@@ -44,7 +45,7 @@ export default function ResultsPage() {
     if (!supabase) return
     const { data, error } = await supabase
       .from('auction_allocations')
-      .select('item_type,slot_index,page_number,row_number,member_id,members(name)')
+      .select('item_type,slot_index,page_number,row_number,member_id,is_designated,members(name)')
       .eq('event_id', id)
       .order('slot_index')
     if (error) return alert(error.message)
@@ -63,14 +64,16 @@ export default function ResultsPage() {
       item_type: r.item_type,
       member_id: r.member_id,
       name: playerLabel(r),
+      is_designated: r.is_designated,
     })),
     [results],
   )
 
   const discordText = useMemo(
-    () => results.map(r =>
-      `${playerLabel(r)} - ${ITEM_LABELS[r.item_type]} - Page ${r.page_number}, Row ${r.row_number}`,
-    ).join('\n'),
+    () => results.map(r => {
+      const tag = r.is_designated ? ' [Designated]' : ''
+      return `${playerLabel(r)} - ${ITEM_LABELS[r.item_type]}${tag} - Page ${r.page_number}, Row ${r.row_number}`
+    }).join('\n'),
     [results],
   )
 
@@ -139,8 +142,11 @@ export default function ResultsPage() {
           {event.status === 'draft' && (
             <Link className="btn" href={`/events/${id}/attendance`}>Continue Setup</Link>
           )}
-          {event.status === 'locked' && (
+          {event.status === 'designated' && (
             <Link className="btn" href={`/events/${id}/generate`}>Go to Generate</Link>
+          )}
+          {event.status === 'locked' && (
+            <Link className="btn" href={`/events/${id}/designated`}>Designated bidders</Link>
           )}
         </div>
       </section>
