@@ -150,6 +150,7 @@ Members react ✅ on the bot's message.
 |-----|-----|
 | Create `#auction-checkin` | Keeps test/live check-ins in one place |
 | Create `#auction-board` | Designated + normal bidder announcements (separate from check-in) |
+| Board channel permissions | Bot role needs **View Channel**, **Send Messages**, and **Embed Links** in `#auction-board` |
 | Use **server nicknames** | Becomes the roster name in the app |
 | Enable **Developer Mode** | Copy server/role/user IDs |
 | Officer role | Restrict `/start-checkin` via `DISCORD_OFFICER_ROLE_ID` |
@@ -164,6 +165,7 @@ Members react ✅ on the bot's message.
 | Bot doesn’t see reactions | Enable **Server Members Intent**; restart bot |
 | `permission denied` from Supabase | Run `supabase/migrations/006_service_role_grants.sql` (or updated `fix-grants.sql`); verify **secret** key in bot `.env` |
 | Member not on website after react | Refresh attendance page; check bot terminal for errors |
+| Bot doesn’t post designated / bidders | Allow **Send Messages** + **Embed Links** for the bot in `DISCORD_BOARD_CHANNEL_ID`; restart bot; check terminal for `Missing Access` |
 | Duplicate name error | Two members same nickname — officer renames one in Members page |
 
 ---

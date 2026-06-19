@@ -15,13 +15,21 @@ import ws from 'ws'
 const {
   DISCORD_BOT_TOKEN,
   DISCORD_GUILD_ID,
-  DISCORD_CHECKIN_CHANNEL_ID,
-  DISCORD_BOARD_CHANNEL_ID,
+  DISCORD_CHECKIN_CHANNEL_ID: CHECKIN_CHANNEL_RAW,
+  DISCORD_BOARD_CHANNEL_ID: BOARD_CHANNEL_RAW,
   DISCORD_OFFICER_ROLE_ID,
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
   CHECKIN_EMOJI = '✅',
 } = process.env
+
+function envId(value) {
+  if (!value) return undefined
+  return value.trim().split(/\s+#/)[0].trim() || undefined
+}
+
+const DISCORD_CHECKIN_CHANNEL_ID = envId(CHECKIN_CHANNEL_RAW)
+const DISCORD_BOARD_CHANNEL_ID = envId(BOARD_CHANNEL_RAW)
 
 if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing required env vars. Copy .env.example to .env')
@@ -261,9 +269,22 @@ async function openCheckin(event, channel) {
   return message
 }
 
+function logDiscordSendError(context, err) {
+  const hint = err.code === 50001 || /missing access/i.test(err.message)
+    ? ' — grant the bot View Channel, Send Messages, and Embed Links in the board channel'
+    : ''
+  console.error(`${context}: ${err.message}${hint}`)
+}
+
 const DISCORD_MAX_EMBED_DESC = 4096
 const DISCORD_MAX_MENTIONS = 50
 const boardPostInFlight = new Set()
+
+/** Only auto-post board announcements for tonight's event — not old test/history rows. */
+function isBoardPostEligible(eventRecord) {
+  if (!eventRecord?.event_date) return true
+  return eventRecord.event_date === todayDate()
+}
 
 function memberRowName(row) {
   const m = row.members
@@ -352,6 +373,7 @@ async function sendBoardMessages(channel, payloads) {
 async function postDesignatedBidders(eventRecord) {
   if (eventRecord.status !== 'designated' && eventRecord.status !== 'generated') return
   if (eventRecord.designated_discord_message_id) return
+  if (!isBoardPostEligible(eventRecord)) return
 
   const lockKey = `designated:${eventRecord.id}`
   if (boardPostInFlight.has(lockKey)) return
@@ -374,6 +396,7 @@ async function postDesignatedBidders(eventRecord) {
       .single()
     if (error) throw error
     if (!fresh || fresh.designated_discord_message_id) return
+    if (!isBoardPostEligible(fresh)) return
 
     const rows = await loadDesignatedRows(eventRecord.id)
     if (!rows.length) {
@@ -412,7 +435,10 @@ async function postDesignatedBidders(eventRecord) {
 
     console.log(`Posted designated bidders for ${eventRecord.type} · ${eventRecord.event_date} in #${channel.name}`)
   } catch (err) {
-    console.error(`Designated board post failed for ${eventRecord.type} · ${eventRecord.event_date}:`, err.message)
+    logDiscordSendError(
+      `Designated board post failed for ${eventRecord.type} · ${eventRecord.event_date}`,
+      err,
+    )
   } finally {
     boardPostInFlight.delete(lockKey)
   }
@@ -484,6 +510,7 @@ function buildMentionPayloads(rows, header, continuedHeader) {
 async function postNormalBidders(eventRecord) {
   if (eventRecord.status !== 'generated') return
   if (eventRecord.bidders_discord_message_id) return
+  if (!isBoardPostEligible(eventRecord)) return
 
   const lockKey = `bidders:${eventRecord.id}`
   if (boardPostInFlight.has(lockKey)) return
@@ -506,6 +533,7 @@ async function postNormalBidders(eventRecord) {
       .single()
     if (error) throw error
     if (!fresh || fresh.bidders_discord_message_id) return
+    if (!isBoardPostEligible(fresh)) return
 
     const rows = await loadNormalBidderRows(eventRecord.id)
     if (!rows.length) {
@@ -539,7 +567,10 @@ async function postNormalBidders(eventRecord) {
       (messages.length > 1 ? ` (${messages.length} messages)` : ''),
     )
   } catch (err) {
-    console.error(`Normal bidders post failed for ${eventRecord.type} · ${eventRecord.event_date}:`, err.message)
+    logDiscordSendError(
+      `Normal bidders post failed for ${eventRecord.type} · ${eventRecord.event_date}`,
+      err,
+    )
   } finally {
     boardPostInFlight.delete(lockKey)
   }
@@ -548,31 +579,35 @@ async function postNormalBidders(eventRecord) {
 async function catchUpBoardPosts() {
   if (!DISCORD_BOARD_CHANNEL_ID) return
 
+  const today = todayDate()
+
   const { data: designatedPending, error: designatedError } = await supabase
     .from('events')
     .select('id, type, event_date, status, designated_discord_message_id, bidders_discord_message_id')
     .in('status', ['designated', 'generated'])
+    .eq('event_date', today)
     .is('designated_discord_message_id', null)
     .order('updated_at', { ascending: false })
-    .limit(3)
+    .limit(1)
+    .maybeSingle()
   if (designatedError) throw designatedError
-  for (const event of designatedPending ?? []) {
-    await postDesignatedBidders(event)
-  }
+  if (designatedPending) await postDesignatedBidders(designatedPending)
 
   const { data: biddersPending, error: biddersError } = await supabase
     .from('events')
     .select('id, type, event_date, status, designated_discord_message_id, bidders_discord_message_id')
     .eq('status', 'generated')
+    .eq('event_date', today)
     .is('bidders_discord_message_id', null)
     .order('updated_at', { ascending: false })
-    .limit(3)
+    .limit(1)
+    .maybeSingle()
   if (biddersError) throw biddersError
-  for (const event of biddersPending ?? []) {
-    if (!event.designated_discord_message_id) {
-      await postDesignatedBidders(event)
+  if (biddersPending) {
+    if (!biddersPending.designated_discord_message_id) {
+      await postDesignatedBidders(biddersPending)
     }
-    await postNormalBidders(event)
+    await postNormalBidders(biddersPending)
   }
 }
 
@@ -581,7 +616,7 @@ function startBoardPostWatch() {
     .channel('board-posts')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
       const row = payload.new
-      if (!row?.id) return
+      if (!row?.id || !isBoardPostEligible(row)) return
       if (row.status === 'designated') {
         postDesignatedBidders(row).catch(err => console.error('Designated post failed:', err.message))
       }
@@ -616,13 +651,26 @@ async function setupAutoBoardPosts() {
 
   console.log(`Board announcements channel: #${channel.name}`)
 
+  const perms = channel.permissionsFor(client.user)
+  if (!perms?.has(PermissionsBitField.Flags.ViewChannel)) {
+    console.error('Bot cannot view the board channel — check channel permissions.')
+    return
+  }
+  if (!perms?.has(PermissionsBitField.Flags.SendMessages)) {
+    console.error(
+      'Bot cannot send messages in the board channel — allow Send Messages + Embed Links for the bot role.',
+    )
+    return
+  }
+
   try {
     await catchUpBoardPosts()
-    startBoardPostWatch()
-    console.log('Auto board posts active (designated on lock, bidders on generate).')
   } catch (err) {
-    console.error('Board post setup failed:', err.message)
+    console.error('Board post catch-up failed:', err.message)
   }
+
+  startBoardPostWatch()
+  console.log('Auto board posts active (designated on lock, bidders on generate).')
 }
 
 async function getCheckinChannel() {

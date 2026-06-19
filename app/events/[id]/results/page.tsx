@@ -200,7 +200,7 @@ export default function ResultsPage() {
     {view === 'board' ? (
       <section className="card feather-board-wrap">
         <p className="muted feather-board-hint">
-          For Discord, use <strong>Download for Discord</strong> — one image per 20 pages (e.g. 01-pages-1-20). Upload top-to-bottom from your downloads folder; page 1–20 should be first.
+          For Discord, use <strong>Download for Discord</strong> — files are numbered so page 1–20 has the <strong>highest</strong> number (e.g. 06-pages-1-20). Select all and upload in name order; page 1–20 should appear on top in Discord.
           Designated bidders appear on the last pages of the board (after all normal item totals).
           Post each image as its own message so members can read it without zooming.
         </p>
