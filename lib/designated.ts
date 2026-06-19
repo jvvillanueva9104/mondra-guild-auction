@@ -6,12 +6,21 @@ import { Member, RewardType } from './types'
 export const DESIGNATED_BIDDER_COUNT = 5
 export const DESIGNATED_PAGES = 5
 
-/** Board slots reserved at the end of each item section. */
-export const DESIGNATED_BOARD_RESERVE: Record<RewardType, number> = {
+/** Fixed designated board block appended after all normal item totals. */
+export const DESIGNATED_BOARD_SLOTS: Record<'puppet' | 'light_dark' | 'time_space', number> = {
   puppet: DESIGNATED_BIDDER_COUNT,
-  mvp: 0,
   light_dark: DESIGNATED_PAGES * ROWS_PER_PAGE,
   time_space: DESIGNATED_PAGES * ROWS_PER_PAGE,
+}
+
+export const DESIGNATED_BOARD_ORDER: ('puppet' | 'light_dark' | 'time_space')[] = [
+  'puppet',
+  'light_dark',
+  'time_space',
+]
+
+export function totalDesignatedBoardSlots(): number {
+  return DESIGNATED_BOARD_ORDER.reduce((sum, type) => sum + DESIGNATED_BOARD_SLOTS[type], 0)
 }
 
 export type DesignatedBidder = {
@@ -58,11 +67,6 @@ export function replaceDesignatedBidder(
   }
 
   return null
-}
-
-export function designatedReserveForCount(itemType: RewardType, totalCount: number): number {
-  if (totalCount <= 0) return 0
-  return Math.min(DESIGNATED_BOARD_RESERVE[itemType], totalCount)
 }
 
 /** Map board tail slot → member for each rotatable item type. */

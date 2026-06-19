@@ -177,7 +177,8 @@ export default function GeneratePage() {
     <EventBanner event={event} />
     <section className="card">
       <p className="muted">
-        Item totals are entered when bidding starts. Designated bidders are already locked on the last pages.
+        Item totals are entered when bidding starts. Normal slots fill the full totals; designated
+        puppet / L/D / T/S pages are appended after the last normal page.
       </p>
       <p>Eligible online members: <b>{eligible.length}</b></p>
       <p>Designated bidders locked: <b>{designated.length}</b> / 5</p>

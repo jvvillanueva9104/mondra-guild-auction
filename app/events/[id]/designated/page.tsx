@@ -249,12 +249,13 @@ export default function DesignatedPage() {
     <section className="card">
       <p>
         Pick <b>{DESIGNATED_BIDDER_COUNT} designated bidders</b> before bidding (no item totals needed).
-        Each person gets <b>1 puppet</b>, <b>1 page of L/D</b>, and <b>1 page of T/S</b> on the last pages of the board.
+        Each person gets <b>1 puppet</b>, <b>1 page of L/D</b>, and <b>1 page of T/S</b> on the
+        <b>last pages of the board</b> (after all normal item totals — e.g. page 121+ if normal ends at 120).
         Decline / no gold pulls the next person in rotation.
       </p>
       <p className="muted">
-        After locking, enter item totals when bidding starts, then generate the full board.
-        Designated bidders are excluded from normal slots for puppet, L/D, and T/S.
+        Normal slots use the full item totals you enter. Designated puppet, L/D, and T/S are
+        <b> extra pages appended at the very end</b> of the board (not at the end of each item section).
       </p>
       {rotationNote && <p className="muted">{rotationNote}</p>}
       <p>Eligible online members: <b>{eligible.length}</b></p>

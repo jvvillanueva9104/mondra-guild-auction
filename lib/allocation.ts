@@ -6,7 +6,13 @@ import {
   splitPassMembers,
 } from './rotation'
 import { DEFAULT_PER_MEMBER_CAPS } from './reward-defaults'
-import { buildDesignatedSlotMap, designatedMemberIds, designatedReserveForCount, DesignatedBidder } from './designated'
+import {
+  buildDesignatedSlotMap,
+  DESIGNATED_BOARD_ORDER,
+  DESIGNATED_BOARD_SLOTS,
+  designatedMemberIds,
+  DesignatedBidder,
+} from './designated'
 import { Allocation, EventReward, EventType, Member, RewardType } from './types'
 
 export { seededShuffle } from './shuffle'
@@ -260,10 +266,6 @@ export function generateAllocations(
       continue
     }
 
-    const designatedCount = designatedReserveForCount(itemType, count)
-    const normalCount = count - designatedCount
-    const designatedSlots = designatedByType.get(itemType) ?? new Map<number, string>()
-
     const orderedMembers = rotationOrder(eligibleMembers, eventId, itemType, ctx, heldTurns)
       .filter(m => !allDesignatedIds.has(m.id))
     const lastWinners = ctx.isFirstGeneratedEvent
@@ -273,31 +275,32 @@ export function generateAllocations(
     let cap = rewardPerMemberCap(rewards, itemType, eventType)
     if (itemType === 'puppet') cap = 1
 
-    if (normalCount > 0) {
-      allocations.push(...assignRotatingItem(
-        eventId,
-        orderedMembers,
-        itemType,
-        slotIndex,
-        normalCount,
-        cap,
-        lastWinners,
-        itemType === 'light_dark' || itemType === 'time_space',
-      ))
-    }
-
-    if (designatedCount > 0) {
-      allocations.push(...assignDesignatedTail(
-        eventId,
-        itemType,
-        slotIndex + normalCount,
-        designatedCount,
-        designatedSlots,
-      ))
-    }
+    allocations.push(...assignRotatingItem(
+      eventId,
+      orderedMembers,
+      itemType,
+      slotIndex,
+      count,
+      cap,
+      lastWinners,
+      itemType === 'light_dark' || itemType === 'time_space',
+    ))
 
     slotIndex += count
     dueForNext[itemType] = computeDueForNext(eligibleMembers, eventId, itemType, ctx, heldTurns)
+  }
+
+  for (const itemType of DESIGNATED_BOARD_ORDER) {
+    const designatedSlots = designatedByType.get(itemType) ?? new Map<number, string>()
+    const reserve = DESIGNATED_BOARD_SLOTS[itemType]
+    allocations.push(...assignDesignatedTail(
+      eventId,
+      itemType,
+      slotIndex,
+      reserve,
+      designatedSlots,
+    ))
+    slotIndex += reserve
   }
 
   for (const type of ROTATABLE_TYPES) {
