@@ -29,14 +29,14 @@ export async function loadRotationContext(
   const eventIds = pastEvents.map(e => e.id)
 
   const [
-    { data: allocations, error: allocError },
+    { data: lastEventAllocs, error: lastAllocError },
     { data: priorParticipants, error: partError },
     { data: lastRun, error: runError },
   ] = await Promise.all([
     supabase
       .from('auction_allocations')
-      .select('event_id, member_id, item_type')
-      .in('event_id', eventIds)
+      .select('member_id, item_type')
+      .eq('event_id', lastEvent.id)
       .not('member_id', 'is', null),
     supabase
       .from('event_participants')
@@ -53,7 +53,7 @@ export async function loadRotationContext(
       .maybeSingle(),
   ])
 
-  if (allocError) throw allocError
+  if (lastAllocError) throw lastAllocError
   if (partError) throw partError
   if (runError) throw runError
 
@@ -65,14 +65,27 @@ export async function loadRotationContext(
     lastEventWinners.set(type, new Set())
   }
 
-  for (const row of allocations ?? []) {
+  for (const row of lastEventAllocs ?? []) {
     const itemType = row.item_type as RewardType
-    if (!allTimeCounts.has(row.member_id)) allTimeCounts.set(row.member_id, new Map())
-    const counts = allTimeCounts.get(row.member_id)!
-    counts.set(itemType, (counts.get(itemType) ?? 0) + 1)
-
-    if (row.event_id === lastEvent.id && ROTATABLE_TYPES.includes(itemType)) {
+    if (ROTATABLE_TYPES.includes(itemType)) {
       lastEventWinners.get(itemType)!.add(row.member_id)
+    }
+  }
+
+  // Fetch lifetime counts per event — Supabase defaults to 1000 rows; merged history can truncate.
+  for (const eventId of eventIds) {
+    const { data: rows, error: countError } = await supabase
+      .from('auction_allocations')
+      .select('member_id, item_type')
+      .eq('event_id', eventId)
+      .not('member_id', 'is', null)
+    if (countError) throw countError
+
+    for (const row of rows ?? []) {
+      const itemType = row.item_type as RewardType
+      if (!allTimeCounts.has(row.member_id)) allTimeCounts.set(row.member_id, new Map())
+      const counts = allTimeCounts.get(row.member_id)!
+      counts.set(itemType, (counts.get(itemType) ?? 0) + 1)
     }
   }
 
