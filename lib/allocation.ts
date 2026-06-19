@@ -124,19 +124,31 @@ function assignFreeForAll(
   )
 }
 
-function assignNextFreeSlots(
-  assignments: Map<number, string | null>,
-  start: number,
-  end: number,
-  memberId: string,
-  amount: number,
-) {
-  let assigned = 0
-  for (let s = start; s < end && assigned < amount; s++) {
-    if (assignments.get(s) !== null) continue
-    assignments.set(s, memberId)
-    assigned++
+/** Even slot counts in member order; extra slots go to earlier members (sit-out priority). */
+function computeEvenSlotCounts(
+  members: Member[],
+  count: number,
+  perMemberCap?: number,
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const member of members) counts.set(member.id, 0)
+  if (members.length === 0 || count <= 0) return counts
+
+  let remaining = count
+  while (remaining > 0) {
+    let assigned = false
+    for (const member of members) {
+      if (remaining <= 0) break
+      const current = counts.get(member.id)!
+      if (perMemberCap !== undefined && current >= perMemberCap) continue
+      counts.set(member.id, current + 1)
+      remaining--
+      assigned = true
+    }
+    if (!assigned) break
   }
+
+  return counts
 }
 
 function assignPageGroupedForMembers(
@@ -160,13 +172,13 @@ function assignPageGroupedForMembers(
       .map(([slotIndex, memberId]) => makeAllocation(eventId, itemType, slotIndex, memberId))
   }
 
-  const perMember = perMemberCap !== undefined
-    ? Math.min(perMemberCap, Math.floor(count / members.length))
-    : Math.floor(count / members.length)
-
-  if (perMember > 0) {
-    for (const member of members) {
-      assignNextFreeSlots(assignments, startSlotIndex, end, member.id, perMember)
+  const slotCounts = computeEvenSlotCounts(members, count, perMemberCap)
+  let slot = startSlotIndex
+  for (const member of members) {
+    const amount = slotCounts.get(member.id) ?? 0
+    for (let i = 0; i < amount; i++) {
+      assignments.set(slot, member.id)
+      slot++
     }
   }
 
@@ -191,31 +203,10 @@ function assignRotatingItem(
   const { pass1, pass2 } = splitPassMembers(orderedMembers, lastWinners)
 
   if (pageGrouped) {
-    const pass1Allocs = assignPageGroupedForMembers(
-      eventId, pass1, itemType, startSlotIndex, count, perMemberCap,
+    // Rotation order already prioritizes non-sit-out members; distribute evenly in one pass.
+    return assignPageGroupedForMembers(
+      eventId, orderedMembers, itemType, startSlotIndex, count, perMemberCap,
     )
-    let filled = pass1Allocs.filter(a => a.member_id !== null).length
-    let remaining = count - filled
-    if (remaining <= 0) return pass1Allocs
-
-    const pass2Allocs = assignPageGroupedForMembers(
-      eventId, pass2, itemType, startSlotIndex + filled, remaining, perMemberCap,
-    )
-    const merged = [...pass1Allocs]
-    for (const alloc of pass2Allocs) {
-      const idx = merged.findIndex(a => a.slot_index === alloc.slot_index)
-      if (idx >= 0) merged[idx] = alloc
-    }
-    filled = merged.filter(a => a.member_id !== null).length
-    remaining = count - filled
-    if (remaining <= 0) return merged
-
-    const ffaStart = startSlotIndex + filled
-    for (let i = 0; i < remaining; i++) {
-      const idx = merged.findIndex(a => a.slot_index === ffaStart + i)
-      if (idx >= 0) merged[idx] = makeAllocation(eventId, itemType, ffaStart + i, null)
-    }
-    return merged
   }
 
   const pass1Allocs = assignOneEachFirst(
