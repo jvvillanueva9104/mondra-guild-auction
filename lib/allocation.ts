@@ -124,31 +124,16 @@ function assignFreeForAll(
   )
 }
 
-/** Even slot counts in member order; extra slots go to earlier members (sit-out priority). */
-function computeEvenSlotCounts(
-  members: Member[],
+/** Same slot count for every member; leftover slots stay FFA. */
+function equalSlotsPerMember(
+  memberCount: number,
   count: number,
   perMemberCap?: number,
-): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const member of members) counts.set(member.id, 0)
-  if (members.length === 0 || count <= 0) return counts
-
-  let remaining = count
-  while (remaining > 0) {
-    let assigned = false
-    for (const member of members) {
-      if (remaining <= 0) break
-      const current = counts.get(member.id)!
-      if (perMemberCap !== undefined && current >= perMemberCap) continue
-      counts.set(member.id, current + 1)
-      remaining--
-      assigned = true
-    }
-    if (!assigned) break
-  }
-
-  return counts
+): number {
+  if (memberCount === 0 || count <= 0) return 0
+  const evenShare = Math.floor(count / memberCount)
+  if (perMemberCap !== undefined) return Math.min(perMemberCap, evenShare)
+  return evenShare
 }
 
 function assignPageGroupedForMembers(
@@ -172,11 +157,10 @@ function assignPageGroupedForMembers(
       .map(([slotIndex, memberId]) => makeAllocation(eventId, itemType, slotIndex, memberId))
   }
 
-  const slotCounts = computeEvenSlotCounts(members, count, perMemberCap)
+  const slotsEach = equalSlotsPerMember(members.length, count, perMemberCap)
   let slot = startSlotIndex
   for (const member of members) {
-    const amount = slotCounts.get(member.id) ?? 0
-    for (let i = 0; i < amount; i++) {
+    for (let i = 0; i < slotsEach; i++) {
       assignments.set(slot, member.id)
       slot++
     }
