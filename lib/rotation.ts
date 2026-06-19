@@ -132,17 +132,23 @@ export function consumeHeldTurns(
   return next
 }
 
+/** Stable tiebreak seed — must not change per event or rotation order shifts between drafts. */
+export function rotationSeed(ctx: RotationContext): string {
+  return ctx.firstGeneratedEventId ?? 'guild-rotation-v3'
+}
+
 /**
  * Order members for puppet/feather assignment.
  * Band 0: held turn → 1: prior pool → 2: late joiner → 3: sit-out (overflow pass).
  */
 export function rotationOrder(
   members: Member[],
-  seed: string,
   itemType: RewardType,
   ctx: RotationContext,
   heldTurns: Map<string, Set<RewardType>>,
 ): Member[] {
+  const seed = rotationSeed(ctx)
+
   if (ctx.isFirstGeneratedEvent) {
     return seededShuffle(members, `${seed}:${itemType}`)
   }
@@ -165,12 +171,11 @@ export function rotationOrder(
 /** First non-sit-out member in rotation order is due next event for this item type. */
 export function computeDueForNext(
   members: Member[],
-  seed: string,
   itemType: RewardType,
   ctx: RotationContext,
   heldTurns: Map<string, Set<RewardType>>,
 ): string | null {
-  const ordered = rotationOrder(members, seed, itemType, ctx, heldTurns)
+  const ordered = rotationOrder(members, itemType, ctx, heldTurns)
   const sittingOut = ctx.lastEventWinners.get(itemType) ?? new Set<string>()
   return ordered.find(m => !sittingOut.has(m.id))?.id ?? null
 }

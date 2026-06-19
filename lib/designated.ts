@@ -29,12 +29,11 @@ export type DesignatedBidder = {
 }
 
 export function generateDesignatedBidders(
-  eventId: string,
   eligibleMembers: Member[],
   ctx: RotationContext,
   heldTurns: Map<string, Set<RewardType>>,
 ): DesignatedBidder[] {
-  const ordered = rotationOrder(eligibleMembers, eventId, 'puppet', ctx, heldTurns)
+  const ordered = rotationOrder(eligibleMembers, 'puppet', ctx, heldTurns)
   const out: DesignatedBidder[] = []
 
   for (const member of ordered) {
@@ -47,7 +46,6 @@ export function generateDesignatedBidders(
 }
 
 export function replaceDesignatedBidder(
-  eventId: string,
   bidderIndex: number,
   eligibleMembers: Member[],
   ctx: RotationContext,
@@ -55,7 +53,7 @@ export function replaceDesignatedBidder(
   current: DesignatedBidder[],
   removedMemberId: string,
 ): string | null {
-  const ordered = rotationOrder(eligibleMembers, eventId, 'puppet', ctx, heldTurns)
+  const ordered = rotationOrder(eligibleMembers, 'puppet', ctx, heldTurns)
   const exclude = new Set<string>([removedMemberId])
   for (const row of current) {
     if (row.bidderIndex !== bidderIndex) exclude.add(row.memberId)

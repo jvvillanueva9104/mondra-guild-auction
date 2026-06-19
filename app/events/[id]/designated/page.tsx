@@ -91,8 +91,10 @@ export default function DesignatedPage() {
             'Next five in rotation become designated bidders — each gets 1 puppet, 1 L/D page, and 1 T/S page.',
           )
         } else {
+          const label = ctx.lastEventType ? `${ctx.lastEventType} · ${ctx.lastEventDate}` : ctx.lastEventDate
           setRotationNote(
-            'Head of puppet rotation picks five designated bidders. Declined / no gold → next in line.',
+            `Rotation continues from last generated event (${label}). ` +
+            'Head of queue picks five designated bidders. Declined / no gold → next in line.',
           )
         }
       })
@@ -149,7 +151,7 @@ export default function DesignatedPage() {
     try {
       const ctx = await loadRotationContext(supabase, id)
       const heldTurns = await loadHeldTurns()
-      const bidders = generateDesignatedBidders(id, eligible, ctx, heldTurns)
+      const bidders = generateDesignatedBidders(eligible, ctx, heldTurns)
       await persistBidders(bidders)
       await loadDesignated()
     } catch (e: unknown) {
@@ -171,7 +173,6 @@ export default function DesignatedPage() {
       }))
 
       const replacement = replaceDesignatedBidder(
-        id,
         bidderIndex,
         eligible,
         ctx,

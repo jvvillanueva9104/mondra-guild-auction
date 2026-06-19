@@ -266,7 +266,7 @@ export function generateAllocations(
       continue
     }
 
-    const orderedMembers = rotationOrder(eligibleMembers, eventId, itemType, ctx, heldTurns)
+    const orderedMembers = rotationOrder(eligibleMembers, itemType, ctx, heldTurns)
       .filter(m => !allDesignatedIds.has(m.id))
     const lastWinners = ctx.isFirstGeneratedEvent
       ? new Set<string>()
@@ -287,7 +287,7 @@ export function generateAllocations(
     ))
 
     slotIndex += count
-    dueForNext[itemType] = computeDueForNext(eligibleMembers, eventId, itemType, ctx, heldTurns)
+    dueForNext[itemType] = computeDueForNext(eligibleMembers, itemType, ctx, heldTurns)
   }
 
   for (const itemType of DESIGNATED_BOARD_ORDER) {
@@ -305,7 +305,7 @@ export function generateAllocations(
 
   for (const type of ROTATABLE_TYPES) {
     if (!(type in dueForNext)) {
-      dueForNext[type] = computeDueForNext(eligibleMembers, eventId, type, ctx, heldTurns)
+      dueForNext[type] = computeDueForNext(eligibleMembers, type, ctx, heldTurns)
     }
   }
 
