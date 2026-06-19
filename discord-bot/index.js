@@ -16,6 +16,7 @@ const {
   DISCORD_BOT_TOKEN,
   DISCORD_GUILD_ID,
   DISCORD_CHECKIN_CHANNEL_ID,
+  DISCORD_BOARD_CHANNEL_ID,
   DISCORD_OFFICER_ROLE_ID,
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
@@ -260,6 +261,370 @@ async function openCheckin(event, channel) {
   return message
 }
 
+const DISCORD_MAX_EMBED_DESC = 4096
+const DISCORD_MAX_MENTIONS = 50
+const boardPostInFlight = new Set()
+
+function memberRowName(row) {
+  const m = row.members
+  if (!m) return 'Unknown'
+  return Array.isArray(m) ? m[0]?.name ?? 'Unknown' : m.name
+}
+
+function memberRowDiscordId(row) {
+  const m = row.members
+  if (!m) return null
+  const member = Array.isArray(m) ? m[0] : m
+  return member?.discord_id ?? null
+}
+
+function formatMemberLine(index, name, discordId) {
+  if (discordId) return `${index}. <@${discordId}>`
+  return `${index}. ${name}`
+}
+
+function collectMentionIds(rows, getDiscordId = memberRowDiscordId) {
+  const ids = []
+  for (const row of rows) {
+    const discordId = getDiscordId(row)
+    if (discordId) ids.push(discordId)
+  }
+  return [...new Set(ids)]
+}
+
+async function getBoardChannel() {
+  if (!DISCORD_BOARD_CHANNEL_ID) return null
+  const guild = client.guilds.cache.get(DISCORD_GUILD_ID)
+  if (!guild) {
+    console.error('Guild not found in cache for board channel lookup')
+    return null
+  }
+  const channel = await guild.channels.fetch(DISCORD_BOARD_CHANNEL_ID).catch(err => {
+    console.error('Could not fetch board channel:', err.message)
+    return null
+  })
+  if (!channel?.isTextBased()) {
+    console.error('DISCORD_BOARD_CHANNEL_ID is not a text channel the bot can use')
+    return null
+  }
+  return channel
+}
+
+async function loadDesignatedRows(eventId) {
+  const { data, error } = await supabase
+    .from('designated_bidders')
+    .select('bidder_index, member_id, members(name, discord_id)')
+    .eq('event_id', eventId)
+    .order('bidder_index')
+  if (error) throw error
+  return data ?? []
+}
+
+async function loadNormalBidderRows(eventId) {
+  const { data, error } = await supabase
+    .from('auction_allocations')
+    .select('member_id, members(name, discord_id)')
+    .eq('event_id', eventId)
+    .eq('is_designated', false)
+    .not('member_id', 'is', null)
+  if (error) throw error
+
+  const byId = new Map()
+  for (const row of data ?? []) {
+    if (!row.member_id || byId.has(row.member_id)) continue
+    byId.set(row.member_id, row)
+  }
+
+  return [...byId.values()].sort((a, b) =>
+    memberRowName(a).localeCompare(memberRowName(b), undefined, { sensitivity: 'base' }),
+  )
+}
+
+async function sendBoardMessages(channel, payloads) {
+  const sent = []
+  for (const payload of payloads) {
+    const message = await channel.send(payload)
+    sent.push(message)
+  }
+  return sent
+}
+
+async function postDesignatedBidders(eventRecord) {
+  if (eventRecord.status !== 'designated' && eventRecord.status !== 'generated') return
+  if (eventRecord.designated_discord_message_id) return
+
+  const lockKey = `designated:${eventRecord.id}`
+  if (boardPostInFlight.has(lockKey)) return
+  boardPostInFlight.add(lockKey)
+
+  try {
+    const channel = await getBoardChannel()
+    if (!channel) {
+      console.log(
+        `Designated list locked (${eventRecord.type} · ${eventRecord.event_date}) — ` +
+        'set DISCORD_BOARD_CHANNEL_ID to auto-post.',
+      )
+      return
+    }
+
+    const { data: fresh, error } = await supabase
+      .from('events')
+      .select('id, type, event_date, status, designated_discord_message_id')
+      .eq('id', eventRecord.id)
+      .single()
+    if (error) throw error
+    if (!fresh || fresh.designated_discord_message_id) return
+
+    const rows = await loadDesignatedRows(eventRecord.id)
+    if (!rows.length) {
+      console.log(`No designated bidders to post for event ${eventRecord.id}`)
+      return
+    }
+
+    const lines = rows.map((row, i) =>
+      formatMemberLine(i + 1, memberRowName(row), memberRowDiscordId(row)),
+    )
+    const mentionIds = collectMentionIds(rows)
+    const header =
+      `**Designated Bidders · ${eventRecord.type} · ${eventRecord.event_date}**\n\n` +
+      'Each bidder receives **1 puppet**, **1 L/D page**, and **1 T/S page** ' +
+      '(extra pages at the end of the board).\n\n'
+
+    const embed = new EmbedBuilder()
+      .setColor(0x8b0000)
+      .setDescription(`${header}${lines.join('\n')}`.slice(0, DISCORD_MAX_EMBED_DESC))
+
+    const message = await channel.send({
+      embeds: [embed],
+      allowedMentions: { users: mentionIds },
+    })
+
+    const { data: saved, error: saveError } = await supabase.from('events').update({
+      designated_discord_message_id: message.id,
+      board_discord_channel_id: channel.id,
+    }).eq('id', eventRecord.id).is('designated_discord_message_id', null).select('id').maybeSingle()
+
+    if (saveError) throw saveError
+    if (!saved) {
+      console.log(`Designated post already linked for event ${eventRecord.id} — skipping duplicate save.`)
+      return
+    }
+
+    console.log(`Posted designated bidders for ${eventRecord.type} · ${eventRecord.event_date} in #${channel.name}`)
+  } catch (err) {
+    console.error(`Designated board post failed for ${eventRecord.type} · ${eventRecord.event_date}:`, err.message)
+  } finally {
+    boardPostInFlight.delete(lockKey)
+  }
+}
+
+function formatMentionOnly(row) {
+  const discordId = memberRowDiscordId(row)
+  if (discordId) return `<@${discordId}>`
+  return memberRowName(row)
+}
+
+/** Group mentions into readable lines; split across messages when limits hit. */
+function buildMentionPayloads(rows, header, continuedHeader) {
+  const mentionIds = collectMentionIds(rows)
+  const parts = rows.map(formatMentionOnly)
+  const mentionLines = []
+  for (let i = 0; i < parts.length; i += 6) {
+    mentionLines.push(parts.slice(i, i + 6).join(' '))
+  }
+
+  const payloads = []
+  let lineIndex = 0
+  let chunkLines = []
+  let chunkIds = new Set()
+  let chunkLen = 0
+  let chunkIndex = 0
+
+  function flush() {
+    if (!chunkLines.length) return
+    const prefix = chunkIndex === 0 ? header : continuedHeader
+    const embed = new EmbedBuilder()
+      .setColor(0x8b0000)
+      .setDescription(`${prefix}${chunkLines.join('\n')}`.slice(0, DISCORD_MAX_EMBED_DESC))
+    payloads.push({
+      embeds: [embed],
+      allowedMentions: { users: [...chunkIds] },
+    })
+    chunkIndex++
+    chunkLines = []
+    chunkIds = new Set()
+    chunkLen = 0
+  }
+
+  while (lineIndex < mentionLines.length) {
+    const line = mentionLines[lineIndex]
+    const lineLen = line.length + 1
+    const lineIds = parts
+      .slice(lineIndex * 6, lineIndex * 6 + 6)
+      .map(part => part.match(/^<@(\d+)>$/)?.[1])
+      .filter(Boolean)
+
+    const newIds = lineIds.filter(id => !chunkIds.has(id))
+    const mentionBlocked = chunkIds.size + newIds.length > DISCORD_MAX_MENTIONS
+
+    if (chunkLines.length > 0 && (chunkLen + lineLen > DISCORD_MAX_EMBED_DESC - header.length || mentionBlocked)) {
+      flush()
+    }
+
+    chunkLines.push(line)
+    chunkLen += lineLen
+    for (const id of lineIds) chunkIds.add(id)
+    lineIndex++
+  }
+
+  flush()
+  return payloads
+}
+
+async function postNormalBidders(eventRecord) {
+  if (eventRecord.status !== 'generated') return
+  if (eventRecord.bidders_discord_message_id) return
+
+  const lockKey = `bidders:${eventRecord.id}`
+  if (boardPostInFlight.has(lockKey)) return
+  boardPostInFlight.add(lockKey)
+
+  try {
+    const channel = await getBoardChannel()
+    if (!channel) {
+      console.log(
+        `Board generated (${eventRecord.type} · ${eventRecord.event_date}) — ` +
+        'set DISCORD_BOARD_CHANNEL_ID to auto-post bidders.',
+      )
+      return
+    }
+
+    const { data: fresh, error } = await supabase
+      .from('events')
+      .select('id, type, event_date, status, bidders_discord_message_id')
+      .eq('id', eventRecord.id)
+      .single()
+    if (error) throw error
+    if (!fresh || fresh.bidders_discord_message_id) return
+
+    const rows = await loadNormalBidderRows(eventRecord.id)
+    if (!rows.length) {
+      console.log(`No normal bidders to post for event ${eventRecord.id}`)
+      return
+    }
+
+    const header =
+      `**Auction Bidders · ${eventRecord.type} · ${eventRecord.event_date}**\n\n` +
+      `${rows.length} member${rows.length === 1 ? '' : 's'} bidding on tonight's normal board:\n\n`
+    const continuedHeader =
+      `**Auction Bidders · ${eventRecord.type} · ${eventRecord.event_date}** _(continued)_\n\n`
+
+    const payloads = buildMentionPayloads(rows, header, continuedHeader)
+    const messages = await sendBoardMessages(channel, payloads)
+    const firstMessage = messages[0]
+
+    const { data: saved, error: saveError } = await supabase.from('events').update({
+      bidders_discord_message_id: firstMessage.id,
+      board_discord_channel_id: channel.id,
+    }).eq('id', eventRecord.id).is('bidders_discord_message_id', null).select('id').maybeSingle()
+
+    if (saveError) throw saveError
+    if (!saved) {
+      console.log(`Bidders post already linked for event ${eventRecord.id} — skipping duplicate save.`)
+      return
+    }
+
+    console.log(
+      `Posted normal bidders for ${eventRecord.type} · ${eventRecord.event_date} in #${channel.name}` +
+      (messages.length > 1 ? ` (${messages.length} messages)` : ''),
+    )
+  } catch (err) {
+    console.error(`Normal bidders post failed for ${eventRecord.type} · ${eventRecord.event_date}:`, err.message)
+  } finally {
+    boardPostInFlight.delete(lockKey)
+  }
+}
+
+async function catchUpBoardPosts() {
+  if (!DISCORD_BOARD_CHANNEL_ID) return
+
+  const { data: designatedPending, error: designatedError } = await supabase
+    .from('events')
+    .select('id, type, event_date, status, designated_discord_message_id, bidders_discord_message_id')
+    .in('status', ['designated', 'generated'])
+    .is('designated_discord_message_id', null)
+    .order('updated_at', { ascending: false })
+    .limit(3)
+  if (designatedError) throw designatedError
+  for (const event of designatedPending ?? []) {
+    await postDesignatedBidders(event)
+  }
+
+  const { data: biddersPending, error: biddersError } = await supabase
+    .from('events')
+    .select('id, type, event_date, status, designated_discord_message_id, bidders_discord_message_id')
+    .eq('status', 'generated')
+    .is('bidders_discord_message_id', null)
+    .order('updated_at', { ascending: false })
+    .limit(3)
+  if (biddersError) throw biddersError
+  for (const event of biddersPending ?? []) {
+    if (!event.designated_discord_message_id) {
+      await postDesignatedBidders(event)
+    }
+    await postNormalBidders(event)
+  }
+}
+
+function startBoardPostWatch() {
+  return supabase
+    .channel('board-posts')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
+      const row = payload.new
+      if (!row?.id) return
+      if (row.status === 'designated') {
+        postDesignatedBidders(row).catch(err => console.error('Designated post failed:', err.message))
+      }
+      if (row.status === 'generated') {
+        postDesignatedBidders(row).catch(err => console.error('Designated post failed:', err.message))
+        postNormalBidders(row).catch(err => console.error('Bidders post failed:', err.message))
+      }
+    })
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Watching for designated / generated events (board posts)…')
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error(`Board post Realtime ${status}:`, err?.message ?? 'unknown error')
+      }
+    })
+}
+
+async function setupAutoBoardPosts() {
+  if (!DISCORD_BOARD_CHANNEL_ID) {
+    console.log('DISCORD_BOARD_CHANNEL_ID not set — designated / bidder lists will not auto-post.')
+    return
+  }
+
+  const channel = await getBoardChannel()
+  if (!channel) {
+    console.error(
+      'DISCORD_BOARD_CHANNEL_ID is set but the bot cannot access that channel — ' +
+      'check the ID and bot permissions (View Channel, Send Messages, Embed Links).',
+    )
+    return
+  }
+
+  console.log(`Board announcements channel: #${channel.name}`)
+
+  try {
+    await catchUpBoardPosts()
+    startBoardPostWatch()
+    console.log('Auto board posts active (designated on lock, bidders on generate).')
+  } catch (err) {
+    console.error('Board post setup failed:', err.message)
+  }
+}
+
 async function getCheckinChannel() {
   if (!DISCORD_CHECKIN_CHANNEL_ID) return null
   const guild = client.guilds.cache.get(DISCORD_GUILD_ID)
@@ -368,6 +733,9 @@ function startDraftEventWatch() {
 function startDraftEventPolling(intervalMs = 15000) {
   return setInterval(() => {
     retryPendingCheckinSaves().catch(err => console.error('Check-in save retry failed:', err.message))
+    if (DISCORD_BOARD_CHANNEL_ID) {
+      catchUpBoardPosts().catch(err => console.error('Board post catch-up failed:', err.message))
+    }
     if (!realtimeSubscribed) {
       catchUpDraftCheckins().catch(err => console.error('Check-in poll failed:', err.message))
     }
@@ -472,6 +840,8 @@ Re-invite: Developer Portal → OAuth2 → URL Generator → scopes: bot + appli
   } else {
     console.log('DISCORD_CHECKIN_CHANNEL_ID not set — use /start-checkin manually, or set the channel ID for auto check-in.')
   }
+
+  await setupAutoBoardPosts()
 })
 
 client.on('interactionCreate', async interaction => {

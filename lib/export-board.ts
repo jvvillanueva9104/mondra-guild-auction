@@ -101,26 +101,31 @@ export async function downloadBoardChunksForDiscord(
   const columns = Array.from(board.querySelectorAll<HTMLElement>('.feather-board-column'))
   if (!columns.length) throw new Error('No board sections found')
 
+  const padWidth = String(columns.length).length
+
   try {
-    for (let i = 0; i < columns.length; i++) {
+    // Download last chunk first so newest-in-folder = pages 1–20 when uploading to Discord top-to-bottom.
+    for (let step = 0; step < columns.length; step++) {
+      const i = columns.length - 1 - step
       const column = columns[i]
       const title =
         column.querySelector('.feather-board-column-title')?.textContent?.trim() ??
         `part-${i + 1}`
       const slug = slugify(title) || `part-${i + 1}`
+      const sequence = String(i + 1).padStart(padWidth, '0')
 
       column.classList.add('feather-board-column-exporting')
       await waitForPaint()
       void column.offsetHeight
 
       const dataUrl = await captureElementPng(column, 3)
-      downloadDataUrl(dataUrl, `${filenameBase}-${slug}.png`)
+      downloadDataUrl(dataUrl, `${filenameBase}-${sequence}-${slug}.png`)
 
       column.classList.remove('feather-board-column-exporting')
 
-      onProgress?.(i + 1, columns.length)
+      onProgress?.(step + 1, columns.length)
 
-      if (i < columns.length - 1) {
+      if (step < columns.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 300))
       }
     }

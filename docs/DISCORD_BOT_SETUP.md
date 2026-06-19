@@ -37,6 +37,10 @@ In **Supabase → SQL Editor**, run the file:
 
 This adds check-in fields on `events`, `source` on `attendance`, and a unique index on `members.discord_id`.
 
+Run in **Supabase → SQL Editor**:
+
+`supabase/migrations/010_discord_board_posts.sql`
+
 For **automatic check-in** when a draft is created, also run:
 
 `supabase/migrations/004_realtime_events.sql`
@@ -71,6 +75,7 @@ Edit `discord-bot/.env`:
 | `DISCORD_BOT_TOKEN` | Developer Portal → Bot → Token |
 | `DISCORD_GUILD_ID` | Discord → Developer Mode → right-click your server → Copy Server ID |
 | `DISCORD_CHECKIN_CHANNEL_ID` | Right-click your check-in channel → Copy Channel ID — bot auto-posts when a draft is created |
+| `DISCORD_BOARD_CHANNEL_ID` | Right-click your auction board channel → Copy Channel ID — bot posts designated + normal bidders |
 | `DISCORD_OFFICER_ROLE_ID` | Optional — right-click officer role → Copy Role ID |
 | `SUPABASE_URL` | Supabase → Settings → API → Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Secret key |
@@ -128,7 +133,8 @@ Members react ✅ on the bot's message.
 
 1. Open **Attendance** for that event
 2. Refresh — members who reacted should appear checked in
-3. Continue: **Auction pool → Lock → Generate → Results**
+3. Continue: **Auction pool → Lock → Designated → Lock → Item totals → Generate → Results**
+4. If `DISCORD_BOARD_CHANNEL_ID` is set, the bot posts **designated bidders** when you lock the list and **normal bidders** when you generate the board
 
 ### D. Close check-in
 
@@ -143,6 +149,7 @@ Members react ✅ on the bot's message.
 | Tip | Why |
 |-----|-----|
 | Create `#auction-checkin` | Keeps test/live check-ins in one place |
+| Create `#auction-board` | Designated + normal bidder announcements (separate from check-in) |
 | Use **server nicknames** | Becomes the roster name in the app |
 | Enable **Developer Mode** | Copy server/role/user IDs |
 | Officer role | Restrict `/start-checkin` via `DISCORD_OFFICER_ROLE_ID` |

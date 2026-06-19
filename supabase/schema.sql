@@ -24,6 +24,9 @@ create table events (
   checkin_open boolean not null default false,
   checkin_message_id text,
   checkin_channel_id text,
+  designated_discord_message_id text,
+  bidders_discord_message_id text,
+  board_discord_channel_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

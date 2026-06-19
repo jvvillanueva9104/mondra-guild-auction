@@ -5,6 +5,7 @@ Connects your Discord server to the Guild Auction Planner Supabase database.
 ## What it does
 
 - **Auto check-in** — when a draft is created on the website, posts ✅ check-in in `DISCORD_CHECKIN_CHANNEL_ID` (bot must be running)
+- **Auto board posts** — when designated list is locked and when the board is generated, posts to `DISCORD_BOARD_CHANNEL_ID` (separate channel)
 - **`/start-checkin type:EO`** — manual fallback if auto check-in is not configured
 - **`/start-checkin type:GL`** — same for Guild League
 - **First reaction** — creates a roster member (Discord nickname + `discord_id`) and marks attendance
