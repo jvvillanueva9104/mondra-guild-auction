@@ -6,7 +6,7 @@ import { EventBanner } from '@/components/EventBanner'
 import { useEvent } from '@/hooks/useEvent'
 import { errorMessage } from '@/lib/errors'
 import { generateAllocations } from '@/lib/allocation'
-import { DesignatedAssignment } from '@/lib/designated'
+import { DesignatedBidder } from '@/lib/designated'
 import { loadRotationContext } from '@/lib/history'
 import { consumeHeldTurns, serializeHeldTurns, updateHeldTurns } from '@/lib/rotation'
 import { REWARD_LABELS } from '@/lib/reward-defaults'
@@ -20,7 +20,7 @@ export default function GeneratePage() {
   const { event, loading: eventLoading, designatedLocked, generated } = useEvent(id)
   const [eligible, setEligible] = useState<Member[]>([])
   const [rewards, setRewards] = useState<EventReward[]>([])
-  const [designated, setDesignated] = useState<DesignatedAssignment[]>([])
+  const [designated, setDesignated] = useState<DesignatedBidder[]>([])
   const [generating, setGenerating] = useState(false)
   const [rotationNote, setRotationNote] = useState<string | null>(null)
   const total = rewards.reduce((s, r) => s + r.quantity, 0)
@@ -35,7 +35,7 @@ export default function GeneratePage() {
         .eq('is_online', true)
         .eq('no_gold', false),
       supabase.from('event_rewards').select('reward_type,quantity,per_member_cap').eq('event_id', id),
-      supabase.from('designated_bidders').select('member_id,item_type,slot_index').eq('event_id', id),
+      supabase.from('designated_bidders').select('member_id,bidder_index').eq('event_id', id),
     ])
     const ids = (parts ?? []).map(p => p.member_id)
     if (ids.length) {
@@ -52,8 +52,7 @@ export default function GeneratePage() {
     setRewards((rewardsData ?? []) as EventReward[])
     setDesignated((designatedData ?? []).map(row => ({
       memberId: row.member_id,
-      itemType: row.item_type as RewardType,
-      slotIndex: row.slot_index,
+      bidderIndex: row.bidder_index,
     })))
   }
 
@@ -181,7 +180,7 @@ export default function GeneratePage() {
         Item totals are entered when bidding starts. Designated bidders are already locked on the last pages.
       </p>
       <p>Eligible online members: <b>{eligible.length}</b></p>
-      <p>Designated slots locked: <b>{designated.length}</b></p>
+      <p>Designated bidders locked: <b>{designated.length}</b> / 5</p>
       <p>Total reward slots: <b>{total}</b></p>
       {limits.length > 0 && (
         <p>Per-player limits this event: {limits.join(' · ')}</p>

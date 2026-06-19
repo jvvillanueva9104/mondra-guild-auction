@@ -6,10 +6,9 @@ create table designated_bidders (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references events(id) on delete cascade,
   member_id uuid not null references members(id),
-  item_type reward_type not null,
-  slot_index int not null check (slot_index >= 0),
+  bidder_index int not null check (bidder_index >= 0 and bidder_index < 5),
   created_at timestamptz not null default now(),
-  unique (event_id, item_type, slot_index)
+  unique (event_id, bidder_index)
 );
 
 create index idx_designated_bidders_event on designated_bidders(event_id);

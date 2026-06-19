@@ -5,27 +5,23 @@ import { useParams, useRouter } from 'next/navigation'
 import { EventBanner } from '@/components/EventBanner'
 import { useEvent } from '@/hooks/useEvent'
 import {
+  DESIGNATED_BIDDER_COUNT,
   DESIGNATED_PAGES,
-  DESIGNATED_SLOT_COUNT,
-  DesignatedAssignment,
-  generateDesignatedAssignments,
-  replaceDesignatedSlot,
+  DesignatedBidder,
+  generateDesignatedBidders,
+  replaceDesignatedBidder,
 } from '@/lib/designated'
 import { errorMessage } from '@/lib/errors'
 import { loadRotationContext } from '@/lib/history'
-import { REWARD_LABELS } from '@/lib/reward-defaults'
 import { updateHeldTurns } from '@/lib/rotation'
 import { useSupabase } from '@/lib/supabase'
-import { Member, RewardType } from '@/lib/types'
+import { Member } from '@/lib/types'
 
 type DbRow = {
   member_id: string
-  item_type: RewardType
-  slot_index: number
+  bidder_index: number
   members: { name: string } | { name: string }[] | null
 }
-
-const ROTATABLE: RewardType[] = ['puppet', 'light_dark', 'time_space']
 
 function memberName(row: DbRow): string {
   const m = row.members
@@ -69,10 +65,9 @@ export default function DesignatedPage() {
     if (!supabase) return
     const { data, error } = await supabase
       .from('designated_bidders')
-      .select('member_id,item_type,slot_index,members(name)')
+      .select('member_id,bidder_index,members(name)')
       .eq('event_id', id)
-      .order('item_type')
-      .order('slot_index')
+      .order('bidder_index')
     if (error) return alert(error.message)
     setRows((data ?? []) as DbRow[])
   }
@@ -93,11 +88,11 @@ export default function DesignatedPage() {
       .then(ctx => {
         if (ctx.isFirstGeneratedEvent) {
           setRotationNote(
-            'Head of rotation queue fills designated slots (5 puppet, 5 pages L/D, 5 pages T/S).',
+            'Next five in rotation become designated bidders — each gets 1 puppet, 1 L/D page, and 1 T/S page.',
           )
         } else {
           setRotationNote(
-            'Next in rotation for each item type fills designated slots. Declined / no gold → next in line.',
+            'Head of puppet rotation picks five designated bidders. Declined / no gold → next in line.',
           )
         }
       })
@@ -105,15 +100,10 @@ export default function DesignatedPage() {
   }, [supabase, id, generated, designatedLocked])
 
   const discordText = useMemo(() => {
-    const lines: string[] = []
-    for (const type of ROTATABLE) {
-      const typeRows = rows.filter(r => r.item_type === type)
-      if (!typeRows.length) continue
-      lines.push(`**${REWARD_LABELS[type]} — designated**`)
-      for (const row of typeRows) {
-        lines.push(`${memberName(row)} (slot ${row.slot_index + 1})`)
-      }
-      lines.push('')
+    if (!rows.length) return ''
+    const lines = ['**Designated bidders** (each: 1 puppet · 1 L/D page · 1 T/S page)', '']
+    for (const row of rows) {
+      lines.push(`${row.bidder_index + 1}. ${memberName(row)}`)
     }
     return lines.join('\n').trim()
   }, [rows])
@@ -123,20 +113,33 @@ export default function DesignatedPage() {
     alert('Copied')
   }
 
-  async function persistAssignments(assignments: DesignatedAssignment[]) {
+  async function persistBidders(bidders: DesignatedBidder[]) {
     if (!supabase) return
     const { error: delError } = await supabase.from('designated_bidders').delete().eq('event_id', id)
     if (delError) throw delError
-    if (!assignments.length) return
+    if (!bidders.length) return
     const { error } = await supabase.from('designated_bidders').insert(
-      assignments.map(a => ({
+      bidders.map(b => ({
         event_id: id,
-        member_id: a.memberId,
-        item_type: a.itemType,
-        slot_index: a.slotIndex,
+        member_id: b.memberId,
+        bidder_index: b.bidderIndex,
       })),
     )
     if (error) throw error
+  }
+
+  async function loadHeldTurns() {
+    if (!supabase) throw new Error('Not connected')
+    const ctx = await loadRotationContext(supabase, id)
+    const [{ data: attendance }, { data: participants }] = await Promise.all([
+      supabase.from('attendance').select('member_id').eq('event_id', id),
+      supabase.from('event_participants').select('member_id,is_online,no_gold').eq('event_id', id),
+    ])
+    const attendedMemberIds = new Set((attendance ?? []).map(a => a.member_id))
+    const noGoldMemberIds = new Set(
+      (participants ?? []).filter(p => p.no_gold).map(p => p.member_id),
+    )
+    return updateHeldTurns(ctx, attendedMemberIds, noGoldMemberIds)
   }
 
   async function generateList() {
@@ -145,23 +148,9 @@ export default function DesignatedPage() {
     setBusy(true)
     try {
       const ctx = await loadRotationContext(supabase, id)
-      const [{ data: attendance }, { data: participants }] = await Promise.all([
-        supabase.from('attendance').select('member_id').eq('event_id', id),
-        supabase.from('event_participants').select('member_id,is_online,no_gold').eq('event_id', id),
-      ])
-      const attendedMemberIds = new Set((attendance ?? []).map(a => a.member_id))
-      const noGoldMemberIds = new Set(
-        (participants ?? []).filter(p => p.no_gold).map(p => p.member_id),
-      )
-      const heldTurns = updateHeldTurns(ctx, attendedMemberIds, noGoldMemberIds)
-      const assignments = generateDesignatedAssignments(
-        id,
-        event.type,
-        eligible,
-        ctx,
-        heldTurns,
-      )
-      await persistAssignments(assignments)
+      const heldTurns = await loadHeldTurns()
+      const bidders = generateDesignatedBidders(id, eligible, ctx, heldTurns)
+      await persistBidders(bidders)
       await loadDesignated()
     } catch (e: unknown) {
       alert(errorMessage(e, 'Could not generate designated list'))
@@ -170,32 +159,20 @@ export default function DesignatedPage() {
     }
   }
 
-  async function declineSlot(itemType: RewardType, slotIndex: number, removedMemberId: string) {
+  async function declineBidder(bidderIndex: number, removedMemberId: string) {
     if (!supabase || !event || !locked || designatedLocked || busy) return
     setBusy(true)
     try {
       const ctx = await loadRotationContext(supabase, id)
-      const [{ data: attendance }, { data: participants }] = await Promise.all([
-        supabase.from('attendance').select('member_id').eq('event_id', id),
-        supabase.from('event_participants').select('member_id,is_online,no_gold').eq('event_id', id),
-      ])
-      const attendedMemberIds = new Set((attendance ?? []).map(a => a.member_id))
-      const noGoldMemberIds = new Set(
-        (participants ?? []).filter(p => p.no_gold).map(p => p.member_id),
-      )
-      const heldTurns = updateHeldTurns(ctx, attendedMemberIds, noGoldMemberIds)
-
+      const heldTurns = await loadHeldTurns()
       const current = rows.map(r => ({
         memberId: r.member_id,
-        itemType: r.item_type,
-        slotIndex: r.slot_index,
+        bidderIndex: r.bidder_index,
       }))
 
-      const replacement = replaceDesignatedSlot(
+      const replacement = replaceDesignatedBidder(
         id,
-        event.type,
-        itemType,
-        slotIndex,
+        bidderIndex,
         eligible,
         ctx,
         heldTurns,
@@ -204,7 +181,7 @@ export default function DesignatedPage() {
       )
 
       if (!replacement) {
-        alert('No one else in rotation for this slot. Remove the row or regenerate the list.')
+        alert('No one else in rotation. Add more online bidders or regenerate the list.')
         return
       }
 
@@ -212,8 +189,7 @@ export default function DesignatedPage() {
         .from('designated_bidders')
         .update({ member_id: replacement })
         .eq('event_id', id)
-        .eq('item_type', itemType)
-        .eq('slot_index', slotIndex)
+        .eq('bidder_index', bidderIndex)
       if (error) throw error
       await loadDesignated()
     } catch (e: unknown) {
@@ -226,9 +202,11 @@ export default function DesignatedPage() {
   async function lockDesignated() {
     if (!supabase || !event || !locked || designatedLocked || busy) return
     if (!rows.length) return alert('Generate the designated list first.')
-    const expected = ROTATABLE.reduce((sum, type) => sum + DESIGNATED_SLOT_COUNT[type], 0)
-    if (rows.length < expected) {
-      return alert(`Designated list is incomplete (${rows.length}/${expected} slots). Regenerate the list.`)
+    if (rows.length < DESIGNATED_BIDDER_COUNT) {
+      return alert(
+        `Need ${DESIGNATED_BIDDER_COUNT} designated bidders (${rows.length}/${DESIGNATED_BIDDER_COUNT}). ` +
+        'Add more online bidders to the pool, regenerate, then lock.',
+      )
     }
     setBusy(true)
     try {
@@ -262,35 +240,41 @@ export default function DesignatedPage() {
   }
 
   const canEdit = locked && !designatedLocked
+  const byIndex = new Map(rows.map(r => [r.bidder_index, r]))
+  const slotsIncomplete = rows.length > 0 && rows.length < DESIGNATED_BIDDER_COUNT
 
   return <main>
     <h1>Designated Bidders</h1>
     <EventBanner event={event} />
     <section className="card">
       <p>
-        Generate the designated list <b>before bidding</b> (no item totals needed).
-        Head of rotation for each item fills{' '}
-        <b>5 puppet</b>, <b>{DESIGNATED_PAGES} pages L/D</b>, and <b>{DESIGNATED_PAGES} pages T/S</b>.
-        Decline / no gold pulls the next person in rotation for that item only.
+        Pick <b>{DESIGNATED_BIDDER_COUNT} designated bidders</b> before bidding (no item totals needed).
+        Each person gets <b>1 puppet</b>, <b>1 page of L/D</b>, and <b>1 page of T/S</b> on the last pages of the board.
+        Decline / no gold pulls the next person in rotation.
       </p>
       <p className="muted">
         After locking, enter item totals when bidding starts, then generate the full board.
-        Designated members are excluded from normal slots for the same item.
+        Designated bidders are excluded from normal slots for puppet, L/D, and T/S.
       </p>
       {rotationNote && <p className="muted">{rotationNote}</p>}
       <p>Eligible online members: <b>{eligible.length}</b></p>
-      <p>Designated slots filled: <b>{rows.length}</b> / {ROTATABLE.reduce((s, t) => s + DESIGNATED_SLOT_COUNT[t], 0)}</p>
+      <p>Designated bidders: <b>{rows.length}</b> / {DESIGNATED_BIDDER_COUNT}</p>
+      {slotsIncomplete && (
+        <p className="muted">
+          Not enough online bidders to fill all five slots. Lock is available only when all {DESIGNATED_BIDDER_COUNT} are assigned.
+        </p>
+      )}
 
       <div className="row">
         {canEdit && (
           <button onClick={generateList} disabled={busy || !eligible.length}>
-            {rows.length ? 'Regenerate designated list' : 'Generate designated list'}
+            {rows.length ? 'Regenerate list' : 'Generate designated list'}
           </button>
         )}
         {rows.length > 0 && (
           <button className="secondary" onClick={copyDiscord} disabled={!discordText}>Copy for Discord</button>
         )}
-        {canEdit && rows.length > 0 && (
+        {canEdit && rows.length >= DESIGNATED_BIDDER_COUNT && (
           <button onClick={lockDesignated} disabled={busy}>Lock designated list</button>
         )}
         {designatedLocked && (
@@ -305,45 +289,47 @@ export default function DesignatedPage() {
       </div>
     </section>
 
-    {ROTATABLE.map(itemType => {
-      const typeRows = rows.filter(r => r.item_type === itemType)
-      const slotCount = DESIGNATED_SLOT_COUNT[itemType]
-      return (
-        <section key={itemType} className="card">
-          <h2>{REWARD_LABELS[itemType]} — designated ({slotCount} slots)</h2>
-          {!typeRows.length && <p className="muted">Not generated yet.</p>}
-          {typeRows.length > 0 && (
-            <table>
-              <thead>
-                <tr>
-                  <th>Slot</th>
-                  <th>Member</th>
-                  {canEdit && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {typeRows.map(row => (
-                  <tr key={`${row.item_type}-${row.slot_index}`}>
-                    <td>{row.slot_index + 1}</td>
-                    <td>{memberName(row)}</td>
-                    {canEdit && (
-                      <td>
+    <section className="card">
+      <h2>Designated bidders ({rows.length}/{DESIGNATED_BIDDER_COUNT})</h2>
+      <p className="muted">Each row: 1 puppet shard · 1 page ({DESIGNATED_PAGES} pages total) L/D · 1 page T/S</p>
+      {!rows.length && <p className="muted">Not generated yet.</p>}
+      {rows.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Member</th>
+              <th>Covers</th>
+              {canEdit && <th></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: DESIGNATED_BIDDER_COUNT }, (_, bidderIndex) => {
+              const row = byIndex.get(bidderIndex)
+              return (
+                <tr key={bidderIndex}>
+                  <td>{bidderIndex + 1}</td>
+                  <td className={row ? undefined : 'muted'}>{row ? memberName(row) : '—'}</td>
+                  <td className="muted">Puppet · L/D page · T/S page</td>
+                  {canEdit && (
+                    <td>
+                      {row ? (
                         <button
                           className="secondary"
                           disabled={busy}
-                          onClick={() => declineSlot(row.item_type, row.slot_index, row.member_id)}
+                          onClick={() => declineBidder(bidderIndex, row.member_id)}
                         >
                           Declined / no gold
                         </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      )
-    })}
+                      ) : null}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
   </main>
 }

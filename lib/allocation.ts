@@ -6,7 +6,7 @@ import {
   splitPassMembers,
 } from './rotation'
 import { DEFAULT_PER_MEMBER_CAPS } from './reward-defaults'
-import { buildDesignatedMap, designatedReserveForCount, DesignatedAssignment } from './designated'
+import { buildDesignatedSlotMap, designatedMemberIds, designatedReserveForCount, DesignatedBidder } from './designated'
 import { Allocation, EventReward, EventType, Member, RewardType } from './types'
 
 export { seededShuffle } from './shuffle'
@@ -237,14 +237,15 @@ export function generateAllocations(
   rewards: EventReward[],
   ctx: RotationContext,
   heldTurns: Map<string, Set<RewardType>>,
-  designatedRows: DesignatedAssignment[] = [],
+  designatedBidders: DesignatedBidder[] = [],
 ): GenerateResult {
   if (eligibleMembers.length === 0) throw new Error('No online eligible members')
 
   const slots = buildRewardSlots(rewards)
   if (slots.length === 0) throw new Error('No reward slots configured')
 
-  const designatedByType = buildDesignatedMap(designatedRows)
+  const designatedByType = buildDesignatedSlotMap(designatedBidders)
+  const allDesignatedIds = designatedMemberIds(designatedBidders)
   const allocations: Allocation[] = []
   const dueForNext: Record<string, string | null> = {}
   let slotIndex = 0
@@ -262,12 +263,9 @@ export function generateAllocations(
     const designatedCount = designatedReserveForCount(itemType, count)
     const normalCount = count - designatedCount
     const designatedSlots = designatedByType.get(itemType) ?? new Map<number, string>()
-    const designatedMemberIds = new Set(
-      Array.from({ length: designatedCount }, (_, i) => designatedSlots.get(i)).filter(Boolean) as string[],
-    )
 
     const orderedMembers = rotationOrder(eligibleMembers, eventId, itemType, ctx, heldTurns)
-      .filter(m => !designatedMemberIds.has(m.id))
+      .filter(m => !allDesignatedIds.has(m.id))
     const lastWinners = ctx.isFirstGeneratedEvent
       ? new Set<string>()
       : (ctx.lastEventWinners.get(itemType) ?? new Set<string>())
